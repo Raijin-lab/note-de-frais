@@ -42,7 +42,7 @@ th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}t
 <header><b id="logo-trigger" title="Cliquez 5 fois pour activer/désactiver le mode local">Note de frais</b><span id="us">Chargement...</span></header>
 <main id="v"></main>
 
-<script src="config.js?v=4"></script>
+<script src="config.js?v=5"></script>
 <script type="module">
 "use strict";
 
@@ -209,18 +209,22 @@ function edit(n) {
   let actionButtons = `<button class="s" data-a="back">← Retour</button> <button data-a="xls">Excel</button> <button class="s" data-a="pdf">PDF</button>`;
   
   if (!locked) {
-      if (n.statut === 'Brouillon' || n.statut === 'Refusée') {
-          actionButtons += ` <button class="s" data-a="soumettre">Soumettre</button>`;
-      } else if (n.statut === 'Soumise') {
-          actionButtons += ` <button class="i" data-a="verifier">Vérifier (Compta)</button> <button class="d" data-a="refuser">Refuser</button>`;
-      } else if (n.statut === 'Vérifiée') {
-          actionButtons += ` <button class="v" data-a="valider">Valider (Patron)</button> <button class="d" data-a="refuser">Refuser</button>`;
+      if (S.isLocalMode) {
+          actionButtons += ` <button class="v" data-a="valider">Valider</button>`;
+      } else {
+          if (n.statut === 'Brouillon' || n.statut === 'Refusée') {
+              actionButtons += ` <button class="s" data-a="soumettre">Soumettre</button>`;
+          } else if (n.statut === 'Soumise') {
+              actionButtons += ` <button class="i" data-a="verifier">Vérifier (Compta)</button> <button class="d" data-a="refuser">Refuser</button>`;
+          } else if (n.statut === 'Vérifiée') {
+              actionButtons += ` <button class="v" data-a="valider">Valider (Patron)</button> <button class="d" data-a="refuser">Refuser</button>`;
+          }
       }
   }
   actionButtons += ` <button class="d" data-a="del">Supprimer</button>`;
 
   let alertBox = "";
-  if (n.statut === 'Refusée' && n.motif_refus) {
+  if (!S.isLocalMode && n.statut === 'Refusée' && n.motif_refus) {
       alertBox = `<div style="background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-bottom:12px;border:1px solid #f5c6cb;"><b>⚠️ Note refusée :</b> ${esc(n.motif_refus)}<br><small>Veuillez corriger et cliquer sur "Soumettre".</small></div>`;
   }
 
@@ -303,11 +307,7 @@ document.addEventListener("click", async e => {
     }
 
     if (a === "refuser") {
-      if (S.isLocalMode) {
-         const motif = prompt("Motif du refus (ex: Justificatif manquant) :");
-         if (!motif) return;
-         n.statut = "Refusée"; n.motif_refus = motif; return await persist(n); 
-      }
+      if (S.isLocalMode) return;
       const pin = prompt("Code secret (Compta ou Patron) pour refuser :");
       if (!pin) return;
       const motif = prompt("Motif du refus (ex: Justificatif manquant) :");
