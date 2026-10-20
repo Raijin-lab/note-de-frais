@@ -45,7 +45,6 @@ th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}t
 <script type="module">
 "use strict";
 
-// --- CONFIGURATION FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyBrakDXYb-vgTTgEoIjwIVaCttRrgwj4aU",
   authDomain: "note-de-frais-a2cim.firebaseapp.com",
@@ -55,12 +54,11 @@ const firebaseConfig = {
   appId: "1:298324155092:web:390481b64d14b316383941"
 };
 
-// Imports Firebase Modulaires (Performance PWA)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// --- OUTILS & UTILITAIRES ---
 const PAYS = {"Maroc":"MAD","France":"EUR","Tunisie":"TND"}; 
 const CH = ["PETIT DEJEUNER","DEJEUNER","DINER","TRAIN","AUTOROUTES","GASOIL","TAXI","PARKING","HOTEL","RECHARGE","DIVERS"];
 const $ = s => document.querySelector(s);
@@ -72,13 +70,11 @@ const fd = d => d ? d.split("-").reverse().join("/") : "";
 const today = () => new Date().toISOString().slice(0,10);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 
-// --- GESTION DU STOCKAGE & ÉTAT ---
 const store = {
   get: (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { alert("Stockage local plein."); } }
 };
 
-// État de l'application
 const S = {
   notes: store.get("ndf_notes", []),
   id: null,
@@ -87,11 +83,17 @@ const S = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// Initialisation d'App Check avec ta clé reCAPTCHA
+const appCheck = initializeAppCheck(app, {
+  provider: new ReCaptchaEnterpriseProvider('6LfmmPgtAAAAAFYAuMK-OEHB0M8PlWibs9h94GBJ'),
+  isTokenAutoRefreshEnabled: true
+});
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 let unsubscribeSnapshot = null;
 
-// Activation / Désactivation du Mode Local (Clic multiple sur le titre)
 let clickCount = 0;
 let clickTimer;
 $("#logo-trigger").addEventListener("click", () => {
@@ -106,7 +108,6 @@ $("#logo-trigger").addEventListener("click", () => {
   }
 });
 
-// --- SYNCHRONISATION FIREBASE ---
 async function initSync() {
   if (S.isLocalMode) {
     $("#banner-local").style.display = "block";
@@ -118,14 +119,15 @@ async function initSync() {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       $("#us").innerHTML = "🟢 Connecté";
-      // Écoute en temps réel des notes non supprimées
       const q = query(collection(db, "notes"), where("supprime", "==", false));
       unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         const cloudNotes = [];
         snapshot.forEach(doc => cloudNotes.push(doc.data()));
         S.notes = cloudNotes.sort((a,b) => b.upd - a.upd);
         store.set("ndf_notes", S.notes);
-        if(!S.id) render(); // Refresh list if not editing
+        if(!S.id) render(); 
+      }, (error) => {
+        console.error("Erreur de synchronisation:", error);
       });
     } else {
       $("#us").innerHTML = "🟠 Connexion...";
@@ -161,7 +163,6 @@ async function persist(n) {
   render();
 }
 
-// --- INTERFACE (VUES) ---
 function render() {
   const n = cur();
   $("#v").innerHTML = n ? edit(n) : list();
@@ -218,7 +219,6 @@ ${!locked ? `<div class="np"><div class="chips">${CH.map(x=>`<button data-a="chi
 <div><label>Total dépenses (DH)</label><div class="big">${f2(c.tot)}</div></div></div></section>`;
 }
 
-// --- ACTIONS CLICS ---
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b) return;
   const a = b.dataset.a, n = cur();
@@ -288,7 +288,6 @@ document.addEventListener("change", e => {
   persist(n);
 });
 
-// Initialisation
 initSync();
 render();
 </script>
