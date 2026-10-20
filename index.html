@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f4e79"><link rel="manifest" href="manifest.json">
+<title>Note de frais</title>
+<style>
+:root{--b:#1f4e79;--bg:#f4f6f9;--l:#d5dbe3;--t:#1b2430}
+*{box-sizing:border-box}
+body{margin:0;font:15px system-ui,Arial,sans-serif;background:var(--bg);color:var(--t);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{background:var(--b);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+header b{font-size:17px}main{max-width:900px;margin:auto;padding:12px}
+section{background:#fff;border:1px solid var(--l);border-radius:10px;padding:12px;margin-bottom:12px}
+h2{margin:0 0 8px;font-size:14px;color:var(--b);text-transform:uppercase}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
+label{font-size:12px;color:#556;display:block;margin-bottom:2px}
+input,select,button{font:inherit;padding:8px;border:1px solid var(--l);border-radius:6px;width:100%;background:#fff;color:var(--t)}
+button{background:var(--b);color:#fff;border:0;cursor:pointer;width:auto}
+button.s{background:#e8edf3;color:var(--b)}button.d{background:#b3261e}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:540px}
+th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}th{background:#e8edf3}
+.n{text-align:right}.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chips button{background:#e8edf3;color:var(--b);padding:6px 10px;font-size:13px}
+.big{font-size:20px;font-weight:700;color:var(--b)}.warn{color:#b3261e;font-weight:600}
+.x{padding:2px 8px;background:#b3261e}
+@media print{header,.np,button{display:none!important}body{background:#fff}section{border:0;padding:0}input,select{border:0;padding:0}}
+</style></head>
+<body>
+<header><b>Note de frais</b><span id="us"></span></header>
+<main id="v"></main>
+<script src="config.js"></script>
+<script>
+"use strict";
+/* Pour la synchronisation cloud : remplacez null par la config Firebase
+   {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."} */
+const FB=null;
+const PAYS={"Maroc":"MAD","France":"EUR","Espagne":"EUR","Allemagne":"EUR","Italie":"EUR","Belgique":"EUR","Portugal":"EUR","Royaume-Uni":"GBP","États-Unis":"USD","Canada":"CAD","Tunisie":"TND","Algérie":"DZD","Égypte":"EGP","Mauritanie":"MRU","Sénégal":"XOF","Côte d'Ivoire":"XOF","Arabie saoudite":"SAR","Émirats arabes unis":"AED","Qatar":"QAR","Turquie":"TRY","Chine":"CNY"};
+const CH=["PETIT DEJEUNER","DEJEUNER","DINER","TRAIN","AUTOROUTES","GASOIL","TAXI","PARKING","HOTEL","RECHARGE","DIVERS"];
+const $=s=>document.querySelector(s);
+const r2=n=>Math.round((+n+Number.EPSILON)*100)/100;
+const f2=n=>r2(n).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=v=>parseFloat(String(v).replace(/\s/g,"").replace(",","."));
+const fd=d=>d?d.split("-").reverse().join("/"):"";
+const today=()=>new Date().toISOString().slice(0,10);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const store={
+  get:(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch{return d}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{alert("Stockage plein : exportez puis supprimez d'anciennes notes.")}}
+};
+const S={notes:store.get("ndf_notes",[]),id:null,profil:store.get("ndf_profil",{nom:"",service:""}),pays:store.get("ndf_pays",{})};
+Object.assign(PAYS,S.pays);
+const SOC=Object.assign({nom:"",adr:"",contact:"",ids:"",logo:"",lw:0,lh:0},window.SOCIETE||{});
+const socOf=()=>SOC;
+let fb=null;
+
+const fp=n=>{const[i,d]=r2(n).toFixed(2).split(".");return i.replace(/\B(?=(\d{3})+$)/g," ")+","+d};
+function logo(f){return new Promise((ok,ko)=>{const r=new FileReader();r.onerror=ko;r.onload=()=>{const i=new Image();i.onerror=ko;i.onload=()=>{
+  const k=Math.min(1,300/i.width,150/i.height),w=Math.round(i.width*k),h=Math.round(i.height*k),c=document.createElement("canvas");
+  c.width=w;c.height=h;c.getContext("2d").drawImage(i,0,0,w,h);ok({logo:c.toDataURL("image/png"),lw:w,lh:h})};i.src=r.result};r.readAsDataURL(f)})}
+async function loadLogo(){
+  try{const r=await fetch("logo.png");if(!r.ok)return;Object.assign(SOC,await logo(await r.blob()))}catch{}
+}
+const ready=loadLogo();
+const newNote=()=>({id:uid(),nom:S.profil.nom,service:S.profil.service,du:today(),au:today(),pays:"Maroc",devise:"MAD",taux:1,objet:"",avances:[],deps:[],upd:Date.now()});
+const cur=()=>S.notes.find(n=>n.id===S.id);
+function calc(n){
+  const loc=n.devise==="MAD",t=loc?1:(+n.taux||0);
+  const dh=n.deps.map(x=>x.cur==="X"&&!loc?r2(x.m*t):r2(x.m));
+  const tot=r2(dh.reduce((a,b)=>a+b,0)),av=r2(n.avances.reduce((a,x)=>a+ +x.m,0));
+  return{loc,t,dh,tot,av,reste:r2(av-tot),dev:t?r2(tot/t):0};
+}
+
+/* ---------- Cloud (optionnel) ---------- */
+async function initFB(){
+  if(!FB)return;
+  try{
+    const [a,au,fs]=await Promise.all(["app","auth","firestore"].map(m=>import("https://www.gstatic.com/firebasejs/10.12.2/firebase-"+m+".js")));
+    const app=a.initializeApp(FB);
+    fb={au,fs,auth:au.getAuth(app),db:fs.getFirestore(app),user:null};
+    au.onAuthStateChanged(fb.auth,u=>{fb.user=u;render();if(u)pull()});
+  }catch(e){console.error(e)}
+}
+const nref=id=>fb.fs.doc(fb.db,"users",fb.user.uid,"notes",id);
+async function push(n){if(!fb?.user)return;try{await fb.fs.setDoc(nref(n.id),n)}catch(e){console.error(e)}}
+async function drop(id){if(!fb?.user)return;try{await fb.fs.deleteDoc(nref(id))}catch(e){console.error(e)}}
+async function pull(){
+  try{
+    const snap=await fb.fs.getDocs(fb.fs.collection(fb.db,"users",fb.user.uid,"notes"));
+    const cloud=new Map();snap.forEach(d=>cloud.set(d.id,d.data()));
+    const loc=new Map(S.notes.map(n=>[n.id,n]));
+    cloud.forEach((c,id)=>{const l=loc.get(id);if(!l||c.upd>l.upd)loc.set(id,c)});
+    S.notes=[...loc.values()].sort((a,b)=>b.upd-a.upd);
+    store.set("ndf_notes",S.notes);
+    S.notes.forEach(n=>{const c=cloud.get(n.id);if(!c||n.upd>c.upd)push(n)});
+    render();
+  }catch(e){console.error(e)}
+}
+function persist(n){n.upd=Date.now();store.set("ndf_notes",S.notes);push(n);render()}
+
+/* ---------- Vues ---------- */
+function render(){
+  const n=cur();
+  $("#v").innerHTML=n?edit(n):list();
+  $("#us").innerHTML=!FB?"Mode local":fb?.user?esc(fb.user.email)+' <button class="s" data-a="out">Déconnexion</button>':"Hors ligne";
+}
+function list(){
+  const login=fb&&!fb.user?`<section class="np"><h2>Synchronisation téléphone / PC</h2><div class="g">
+    <div><label>Email</label><input id="em" type="email" autocomplete="username"></div>
+    <div><label>Mot de passe</label><input id="pw" type="password" autocomplete="current-password"></div></div>
+    <p><button data-a="in">Se connecter</button> <button class="s" data-a="up">Créer un compte</button></p></section>`:"";
+  const rows=S.notes.map(n=>`<tr><td>${fd(n.du)} → ${fd(n.au)}</td><td>${esc(n.pays)} ${esc(n.objet)}</td><td class="n">${f2(calc(n).tot)}</td><td><button class="s" data-a="open" data-i="${esc(n.id)}">Ouvrir</button></td></tr>`).join("");
+  return login+`<section><h2>Mes notes de frais</h2><p><button data-a="new">+ Nouvelle note</button></p>`+
+    (rows?`<div class="tw"><table><tr><th>Période</th><th>Destination</th><th class="n">Total DH</th><th></th></tr>${rows}</table></div>`:"<p>Aucune note pour le moment.</p>")+`</section>`;
+}
+function edit(n){
+  const c=calc(n),dev=esc(n.devise);
+  const I=(k,l,t="text",x="")=>`<div><label>${l}</label><input data-k="${k}" type="${t}" value="${esc(n[k])}" ${x}></div>`;
+  const opts=Object.keys(PAYS).map(p=>`<option ${p===n.pays?"selected":""}>${esc(p)}</option>`).join("")+'<option value="__x">Autre pays…</option>';
+  const last=n.deps.length?n.deps[n.deps.length-1].d:n.du;
+  const av=n.avances.map((a,i)=>`<tr><td>${fd(a.d)}</td><td class="n">${f2(a.m)}</td>${c.loc?"":`<td class="n">${c.t?f2(a.m/c.t):"—"} ${dev}</td>`}<td><button class="x np" data-a="rmav" data-i="${i}">×</button></td></tr>`).join("");
+  const dp=n.deps.map((x,i)=>{
+    const t=x.cur==="X"&&!c.loc?f2(x.m)+" "+dev:f2(x.m);
+    return`<tr><td>${fd(x.d)}</td><td>${esc(x.desc)}</td><td class="n">${x.mode==="cash"?t:""}</td><td class="n">${x.mode==="carte"?t:""}</td><td class="n">${x.mode==="autre"?t:""}</td><td class="n"><b>${f2(c.dh[i])}</b></td><td><button class="x np" data-a="rmdep" data-i="${i}">×</button></td></tr>`}).join("");
+  const reste=c.reste>=0?["À rembourser (par le technicien)",c.reste]:["À payer (par l'entreprise)",-c.reste];
+  return`<p class="np"><button class="s" data-a="back">← Retour</button> <button data-a="xls">Exporter Excel</button> <button class="s" data-a="pdf">Exporter PDF</button> <button class="d" data-a="del">Supprimer</button></p>
+<section><h2>Note de frais — employé et déplacement</h2><div class="g">
+${I("nom","Nom de l'employé / fonction")}${I("service","Service / Department")}${I("du","Période du","date")}${I("au","au","date")}
+<div><label>Pays de destination</label><select data-k="pays">${opts}</select></div>${I("objet","Objet / client")}
+<div><label>Devise</label><input value="${dev}" readonly></div>
+${c.loc?"":`<div><label>Taux : 1 ${dev} = … DH (taux de la banque)</label><input data-k="taux" inputmode="decimal" value="${n.taux||""}" placeholder="ex. 10,85"></div>`}
+</div>${!c.loc&&!c.t?'<p class="warn">Saisissez le taux de change : il s\'applique à toutes les dépenses en devise.</p>':""}</section>
+<section><h2>Avances (reçues en DH)</h2><div class="tw"><table><tr><th>Date</th><th class="n">Montant DH</th>${c.loc?"":`<th class="n">Équivalent ${dev}</th>`}<th class="np"></th></tr>${av}</table></div>
+<div class="g np" style="margin-top:8px"><div><label>Date</label><input id="ad" type="date" value="${esc(n.du)}"></div><div><label>Montant (DH)</label><input id="am" inputmode="decimal"></div><div><button data-a="addav">Ajouter l'avance</button></div></div></section>
+<section><h2>Dépenses</h2>
+<div class="np"><div class="chips">${CH.map(x=>`<button data-a="chip" data-v="${x}">${x}</button>`).join("")}</div>
+<div class="g"><div><label>Date</label><input id="dt" type="date" value="${esc(last)}"></div><div><label>Description</label><input id="dd"></div>
+<div><label>Montant</label><input id="dm" inputmode="decimal"></div>
+${c.loc?"":`<div><label>Monnaie</label><select id="dc"><option value="X">${dev}</option><option value="DH">DH</option></select></div>`}
+<div><label>Paiement</label><select id="dmo"><option value="cash">Cash</option><option value="carte">Carte</option><option value="autre">Autre</option></select></div>
+<div><button data-a="adddep">Ajouter</button></div></div></div>
+<div class="tw" style="margin-top:8px"><table><tr><th>Date</th><th>Description</th><th class="n">Paiement cash</th><th class="n">Paiement carte</th><th class="n">Paiement autre</th><th class="n">Total DH</th><th class="np"></th></tr>${dp}</table></div></section>
+<section><h2>Totaux</h2><div class="g">
+<div><label>Total dépenses (DH)</label><div class="big">${f2(c.tot)}</div></div>
+${c.loc?"":`<div><label>Total dépenses (${dev})</label><div class="big">${f2(c.dev)}</div></div>`}
+<div><label>Avance (DH)</label><div class="big">${f2(c.av)}</div></div>
+<div><label>${reste[0]}</label><div class="big">${f2(reste[1])}</div></div></div></section>
+<section><div class="g"><div><label>Signature employé</label><br><br>_____________</div><div><label>Signature direction</label><br><br>_____________</div></div></section>`;
+}
+
+/* ---------- Actions ---------- */
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;
+  const a=b.dataset.a,n=cur(),v=id=>($("#"+id)?.value||"").trim();
+  try{
+    if(a==="new"){const x=newNote();S.notes.unshift(x);S.id=x.id;return persist(x)}
+    if(a==="open"){S.id=b.dataset.i;return render()}
+    if(a==="back"){S.id=null;return render()}
+    if(a==="out")return await fb.au.signOut(fb.auth);
+    if(a==="in"||a==="up"){
+      const em=v("em"),pw=$("#pw").value;
+      if(!em||pw.length<6)return alert("Email et mot de passe (6 caractères minimum) requis.");
+      return await(a==="in"?fb.au.signInWithEmailAndPassword:fb.au.createUserWithEmailAndPassword)(fb.auth,em,pw);
+    }
+    if(!n)return;
+    if(a==="del"){
+      if(!confirm("Supprimer définitivement cette note ?"))return;
+      S.notes=S.notes.filter(x=>x!==n);S.id=null;store.set("ndf_notes",S.notes);drop(n.id);return render();
+    }
+    if(a==="pdf")return await pdf(n);
+    if(a==="xls")return await xls(n);
+    if(a==="chip"){$("#dd").value=b.dataset.v;return $("#dm").focus()}
+    if(a==="addav"){
+      const m=num(v("am"));
+      if(!(m>0)||!v("ad"))return alert("Date et montant requis.");
+      n.avances.push({d:v("ad"),m:r2(m)});return persist(n);
+    }
+    if(a==="adddep"){
+      const m=num(v("dm"));
+      if(!(m>0)||!v("dt")||!v("dd"))return alert("Date, description et montant requis.");
+      n.deps.push({d:v("dt"),desc:v("dd").toUpperCase(),m:r2(m),cur:v("dc")||"DH",mode:v("dmo")});return persist(n);
+    }
+    if(a==="rmav"){n.avances.splice(+b.dataset.i,1);return persist(n)}
+    if(a==="rmdep"){n.deps.splice(+b.dataset.i,1);return persist(n)}
+  }catch(err){alert(err.message||err)}
+});
+document.addEventListener("change",e=>{
+  const t=e.target,n=cur(),k=t.dataset?.k;if(!n||!k)return;
+  if(k==="pays"){
+    let p=t.value;
+    if(p==="__x"){
+      p=(prompt("Nom du pays ?")||"").trim();
+      const d=(prompt("Code devise (ex. EUR, USD, SAR) ?")||"").trim().toUpperCase();
+      if(!p||!/^[A-Z]{3}$/.test(d))return render();
+      PAYS[p]=d;S.pays[p]=d;store.set("ndf_pays",S.pays);
+    }
+    n.pays=p;n.devise=PAYS[p];n.taux=n.devise==="MAD"?1:(n.taux===1?"":n.taux);
+  }else if(k==="taux"){const x=num(t.value);n.taux=x>0?x:""}
+  else n[k]=t.value.trim();
+  if(k==="nom"||k==="service"){S.profil[k]=n[k];store.set("ndf_profil",S.profil)}
+  persist(n);
+});
+
+/* ---------- Export Excel (même structure que le modèle validé) ---------- */
+async function xls(n){
+  await ready;
+  const c=calc(n);
+  if(!window.ExcelJS)await new Promise((ok,ko)=>{
+    const s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+    s.onload=ok;s.onerror=()=>ko(new Error("Connexion internet requise pour l'export Excel."));
+    document.head.appendChild(s);
+  });
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet((n.nom||"Note").replace(/[\\\/?*\[\]:]/g," ").slice(0,30)||"Note");
+  ws.columns=[{width:15},{width:28},{width:14},{width:14},{width:15},{width:18}];
+  ws.pageSetup={paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0};
+  const BD={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  const D="dd/mm/yyyy",M="#,##0.00",dt=d=>d?new Date(d+"T00:00:00Z"):null;
+  const put=(a,v,o={})=>{const x=ws.getCell(a);x.value=v;x.font={name:"Arial",size:10,bold:!!o.b};
+    if(o.f)x.numFmt=o.f;if(o.g)x.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE8EDF3"}};return x};
+  const box=r=>["A","B","C","D","E","F"].forEach(l=>ws.getCell(l+r).border=BD);
+
+  put("A2","NOTE DE FRAIS",{b:1});ws.getCell("A2").font={name:"Arial",size:14,bold:true};
+  const so=socOf(n);
+  [so.nom,so.adr,so.contact,so.ids].forEach((t,i)=>{const a="D"+(i+1);put(a,t||"",{b:i==0});ws.mergeCells(a+":F"+(i+1));
+    ws.getCell(a).alignment={horizontal:"right"};if(i==0)ws.getCell(a).font={name:"Arial",size:12,bold:true}});
+  if(so.logo){const k=Math.min(1,150/so.lw,40/so.lh);ws.addImage(wb.addImage({base64:so.logo,extension:"png"}),{tl:{col:0,row:2},ext:{width:so.lw*k,height:so.lh*k}})}
+  put("A5","Nom de l'Employe /fonction");put("C5",n.nom,{b:1});
+  put("A6","Service / Department");put("C6",n.service,{b:1});
+  put("A7","Période");put("C7",dt(n.du),{f:D});put("D7","AU",{b:1});put("E7",dt(n.au),{f:D});
+  put("A8","Destination / Objet Déplacement");put("C8",n.pays,{b:1});put("D8",n.objet,{b:1});
+  put("A9","AVANCES",{b:1});ws.mergeCells("A9:B9");
+  ["Date","Montant","","Devise","Cours","débit compte"].forEach((h,i)=>put("ABCDEF"[i]+"10",h,{b:1,g:1}));box(10);
+
+  const na=Math.max(n.avances.length,3),av0=11,avN=av0+na-1;
+  const dep0=avN+4,nl=Math.max(n.deps.length,12),depN=dep0+nl-1;
+  const totR=depN+2,avR=totR+2,remR=avR+1,payR=avR+2,tx="$F$"+remR;
+
+  for(let i=0;i<na;i++){
+    const r=av0+i,a=n.avances[i];box(r);if(!a)continue;
+    put("A"+r,dt(a.d),{f:D});put("F"+r,a.m,{f:M});put("D"+r,n.devise);
+    if(c.loc){put("B"+r,{formula:"F"+r,result:a.m},{f:M})}
+    else{put("E"+r,{formula:tx,result:c.t},{f:"0.0000"});
+      put("B"+r,{formula:`IF(${tx}>0,ROUND(F${r}/${tx},2),0)`,result:c.t?r2(a.m/c.t):0},{f:M})}
+  }
+  put("A"+(avN+2),"DEPENSES",{b:1});ws.mergeCells(`A${avN+2}:B${avN+2}`);
+  ["DATE","DESCRIPTION","paiement cash","paiement CARTE","paiment autre","Total depense"].forEach((h,i)=>put("ABCDEF"[i]+(avN+3),h,{b:1,g:1}));box(avN+3);
+
+  const sums={C:0,D:0,E:0};
+  for(let i=0;i<nl;i++){
+    const r=dep0+i,x=n.deps[i];box(r);if(!x)continue;
+    const col={cash:"C",carte:"D",autre:"E"}[x.mode]||"C",dh=c.dh[i];sums[col]+=dh;
+    put("A"+r,dt(x.d),{f:D});put("B"+r,x.desc);
+    put(col+r,x.cur==="X"&&!c.loc?{formula:`ROUND(${x.m}*${tx},2)`,result:dh}:x.m,{f:M});
+    put("F"+r,{formula:`SUM(C${r}:E${r})`,result:dh},{f:M});
+  }
+  put("B"+totR,"TOTAL Dépenses",{b:1});
+  ["C","D","E"].forEach(l=>put(l+totR,{formula:`SUM(${l}${dep0}:${l}${depN})`,result:r2(sums[l])},{b:1,f:M}));
+  put("F"+totR,{formula:`SUM(F${dep0}:F${depN})`,result:c.tot},{b:1,f:M});
+  put("B"+avR,"Avance");put("F"+avR,{formula:`SUM(F${av0}:F${avN})`,result:c.av},{b:1,f:M});
+  put("B"+remR,"A rembourser");put("C"+remR,{formula:`MAX(F${avR}-F${totR},0)`,result:Math.max(c.reste,0)},{b:1,f:M});
+  put("E"+remR,"Tx change",{b:1});put("F"+remR,c.t,{b:1,f:"0.0000"});
+  put("B"+payR,"A payer");put("C"+payR,{formula:`MAX(F${totR}-F${avR},0)`,result:Math.max(-c.reste,0)},{b:1,f:M});
+  put("E"+payR,"Total dépense "+n.devise,{b:1});
+  put("F"+payR,{formula:`IF(${tx}>0,ROUND(F${totR}/${tx},2),0)`,result:c.dev},{b:1,f:M});
+
+  const s=payR+2;
+  put("A"+s,"Signature",{b:1});put("C"+s,"Signature",{b:1});
+  put("A"+(s+1),"Employé",{b:1});put("C"+(s+1),"Direction",{b:1});
+  ws.getRow(s+2).height=45;["A","B","C","D"].forEach(l=>ws.getCell(l+(s+2)).border=BD);
+
+  const buf=await wb.xlsx.writeBuffer(),a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  a.download="Note_de_Frais_"+((n.nom||"technicien").replace(/\W+/g,"_"))+"_"+n.du+".xlsx";
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+const lib=src=>new Promise((ok,ko)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>ko(new Error("Connexion internet requise pour générer le PDF."));document.head.appendChild(s)});
+async function pdf(n){
+  await ready;
+  if(!window.jspdf){
+    await lib("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    await lib("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
+  }
+  const c=calc(n),so=socOf(n),dev=n.devise,doc=new window.jspdf.jsPDF({unit:"mm",format:"a4"});
+  const W=210,M=14,BL=[31,78,121],GR=[232,237,243];let y=14;
+  const base={margin:{left:M,right:M},theme:"grid",styles:{fontSize:9,cellPadding:1.8,textColor:30,lineColor:[200,206,214]},headStyles:{fillColor:BL,textColor:255},footStyles:{fillColor:GR,textColor:30,fontStyle:"bold"}};
+  const T=o=>{doc.autoTable({...base,...o,styles:{...base.styles,...(o.styles||{})}});y=doc.lastAutoTable.finalY};
+  const need=h=>{if(y+h>280){doc.addPage();y=16}};
+  const sec=t=>{need(30);y+=7;doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(10).text(t,M,y);y+=1.5};
+  const R={halign:"right"};
+
+  /* En-tête société */
+  if(so.logo){const k=Math.min(45/so.lw,20/so.lh);doc.addImage(so.logo,"PNG",M,y,so.lw*k,so.lh*k)}
+  doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(13).text(so.nom||"",W-M,y+4,{align:"right"});
+  doc.setTextColor(80).setFont("helvetica","normal").setFontSize(8.5);
+  [so.adr,so.contact,so.ids].filter(Boolean).forEach((t,i)=>doc.text(t,W-M,y+10+i*4.5,{align:"right"}));
+  doc.setDrawColor(...BL).setLineWidth(.6).line(M,38,W-M,38);
+  doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(17).text("NOTE DE FRAIS",W/2,48,{align:"center"});
+
+  T({startY:54,body:[["Nom / fonction",n.nom],["Service / Department",n.service],["Période","du "+fd(n.du)+" au "+fd(n.au)],["Destination / objet",n.pays+(n.objet?" - "+n.objet:"")]]
+    .concat(c.loc?[]:[["Devise / taux de change",dev+" : 1 "+dev+" = "+String(c.t).replace(".",",")+" DH"]]),
+    columnStyles:{0:{fontStyle:"bold",fillColor:GR,cellWidth:52}}});
+
+  sec("AVANCES");
+  const ex=c.loc?[]:[""];
+  T({startY:y,head:[["Date","Montant (DH)"].concat(c.loc?[]:["Équivalent "+dev])],
+    body:n.avances.length?n.avances.map(a=>[fd(a.d),fp(a.m)].concat(c.loc?[]:[c.t?fp(a.m/c.t)+" "+dev:"-"])):[["-","0,00"].concat(ex)],
+    columnStyles:{1:R,2:R}});
+
+  const sm={cash:0,carte:0,autre:0};n.deps.forEach((x,i)=>{sm[x.mode]=(sm[x.mode]||0)+c.dh[i]});
+  const cell=(x,m)=>x.mode===m?(x.cur==="X"&&!c.loc?fp(x.m)+" "+dev:fp(x.m)):"";
+  sec("DÉPENSES");
+  T({startY:y,head:[["Date","Description","Paiement cash","Paiement carte","Paiement autre","Total (DH)"]],
+    body:n.deps.map((x,i)=>[fd(x.d),x.desc,cell(x,"cash"),cell(x,"carte"),cell(x,"autre"),fp(c.dh[i])]),
+    foot:[["","TOTAL Dépenses",fp(sm.cash),fp(sm.carte),fp(sm.autre),fp(c.tot)]],showFoot:"lastPage",
+    columnStyles:{2:R,3:R,4:R,5:{halign:"right",fontStyle:"bold"}}});
+
+  need(40);y+=6;
+  const r=c.reste>=0?["À rembourser (par le technicien)",c.reste]:["À payer (par l'entreprise)",-c.reste];
+  T({startY:y,margin:{left:W/2,right:M},
+    body:[["Total dépenses (DH)",fp(c.tot)]].concat(c.loc?[]:[["Total dépenses ("+dev+")",fp(c.dev)]],[["Avance (DH)",fp(c.av)],[r[0],fp(r[1])]]),
+    columnStyles:{0:{fontStyle:"bold",fillColor:GR},1:{halign:"right",fontStyle:"bold"}}});
+
+  need(45);y+=8;
+  const bx=(x,t)=>{doc.setDrawColor(150).setLineWidth(.3).rect(x,y,85,28);doc.setTextColor(30).setFont("helvetica","bold").setFontSize(9).text(t,x+3,y+5)};
+  bx(M,"Signature Employé");bx(W-M-85,"Signature Direction");y+=32;
+
+  const N=doc.getNumberOfPages();
+  for(let i=1;i<=N;i++){
+    doc.setPage(i).setFont("helvetica","normal").setFontSize(8).setTextColor(120);
+    doc.text((so.nom?so.nom+" - ":"")+"Note de frais "+(n.nom||""),M,290);
+    doc.text("Page "+i+"/"+N,W-M,290,{align:"right"});
+  }
+  doc.save("Note_de_Frais_"+((n.nom||"technicien").replace(/\W+/g,"_"))+"_"+n.du+".pdf");
+}
+
+if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+render();initFB();
+</script></body></html>
