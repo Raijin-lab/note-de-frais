@@ -27,13 +27,13 @@ th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}t
 <body>
 <header><b>Note de frais</b><span id="us"></span></header>
 <main id="v"></main>
-<script src="config.js"></script>
+<script src="config.js?v=2"></script>
 <script>
 "use strict";
 /* Pour la synchronisation cloud : remplacez null par la config Firebase
    {apiKey:"...",authDomain:"...",projectId:"...",appId:"..."} */
 const FB=null;
-const PAYS={"Maroc":"MAD","France":"EUR","Espagne":"EUR","Allemagne":"EUR","Italie":"EUR","Belgique":"EUR","Portugal":"EUR","Royaume-Uni":"GBP","États-Unis":"USD","Canada":"CAD","Tunisie":"TND","Algérie":"DZD","Égypte":"EGP","Mauritanie":"MRU","Sénégal":"XOF","Côte d'Ivoire":"XOF","Arabie saoudite":"SAR","Émirats arabes unis":"AED","Qatar":"QAR","Turquie":"TRY","Chine":"CNY"};
+const PAYS={"Maroc":"MAD","France":"EUR","Espagne":"EUR","Allemagne":"EUR","Italie":"EUR","Belgique":"EUR","Portugal":"EUR","Royaume-Uni":"GBP","États-Unis":"USD","Canada":"CAD","Tunisie":"TND","Algérie":"DZD","Égypte":"EGP","Mauritanie":"MRU","Sénégal":"XOF","Côte d'Ivoire":"XOF","Arabie saoudite":"SAR","Émirats arabes unis":"AED","Qatar":"QAR","Turquie":"TRY","Chine":"CNY","Gabon":"XAF","Cameroun":"XAF","Congo":"XAF","Mali":"XOF","Burkina Faso":"XOF","Guinée":"GNF","Nigeria":"NGN","Ghana":"GHS","Kenya":"KES","Libye":"LYD","Jordanie":"JOD","Koweït":"KWD","Oman":"OMR","Bahreïn":"BHD","Liban":"LBP","Suisse":"CHF","Pays-Bas":"EUR","Pologne":"PLN","Roumanie":"RON","Inde":"INR","Afrique du Sud":"ZAR","Brésil":"BRL"};
 const CH=["PETIT DEJEUNER","DEJEUNER","DINER","TRAIN","AUTOROUTES","GASOIL","TAXI","PARKING","HOTEL","RECHARGE","DIVERS"];
 const $=s=>document.querySelector(s);
 const r2=n=>Math.round((+n+Number.EPSILON)*100)/100;
@@ -48,7 +48,7 @@ const store={
   set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{alert("Stockage plein : exportez puis supprimez d'anciennes notes.")}}
 };
 const S={notes:store.get("ndf_notes",[]),id:null,profil:store.get("ndf_profil",{nom:"",service:""}),pays:store.get("ndf_pays",{})};
-Object.assign(PAYS,S.pays);
+Object.assign(PAYS,S.pays,window.SOCIETE?.pays||{});
 const SOC=Object.assign({nom:"",adr:"",contact:"",ids:"",logo:"",lw:0,lh:0},window.SOCIETE||{});
 const socOf=()=>SOC;
 let fb=null;
@@ -284,7 +284,7 @@ async function pdf(n){
   const c=calc(n),so=socOf(n),dev=n.devise,doc=new window.jspdf.jsPDF({unit:"mm",format:"a4"});
   const W=210,M=14,BL=[31,78,121],GR=[232,237,243];let y=14;
   const base={margin:{left:M,right:M},theme:"grid",styles:{fontSize:9,cellPadding:1.8,textColor:30,lineColor:[200,206,214]},headStyles:{fillColor:BL,textColor:255},footStyles:{fillColor:GR,textColor:30,fontStyle:"bold"}};
-  const T=o=>{doc.autoTable({...base,...o,styles:{...base.styles,...(o.styles||{})}});y=doc.lastAutoTable.finalY};
+  const T=o=>{const rc=o.rc||[];doc.autoTable({...base,...o,styles:{...base.styles,...(o.styles||{})},didParseCell:d=>{if(rc.includes(d.column.index))d.cell.styles.halign="right"}});y=doc.lastAutoTable.finalY};
   const need=h=>{if(y+h>280){doc.addPage();y=16}};
   const sec=t=>{need(30);y+=7;doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(10).text(t,M,y);y+=1.5};
   const R={halign:"right"};
@@ -305,7 +305,7 @@ async function pdf(n){
   const ex=c.loc?[]:[""];
   T({startY:y,head:[["Date","Montant (DH)"].concat(c.loc?[]:["Équivalent "+dev])],
     body:n.avances.length?n.avances.map(a=>[fd(a.d),fp(a.m)].concat(c.loc?[]:[c.t?fp(a.m/c.t)+" "+dev:"-"])):[["-","0,00"].concat(ex)],
-    columnStyles:{1:R,2:R}});
+    rc:[1,2]});
 
   const sm={cash:0,carte:0,autre:0};n.deps.forEach((x,i)=>{sm[x.mode]=(sm[x.mode]||0)+c.dh[i]});
   const cell=(x,m)=>x.mode===m?(x.cur==="X"&&!c.loc?fp(x.m)+" "+dev:fp(x.m)):"";
@@ -313,7 +313,7 @@ async function pdf(n){
   T({startY:y,head:[["Date","Description","Paiement cash","Paiement carte","Paiement autre","Total (DH)"]],
     body:n.deps.map((x,i)=>[fd(x.d),x.desc,cell(x,"cash"),cell(x,"carte"),cell(x,"autre"),fp(c.dh[i])]),
     foot:[["","TOTAL Dépenses",fp(sm.cash),fp(sm.carte),fp(sm.autre),fp(c.tot)]],showFoot:"lastPage",
-    columnStyles:{2:R,3:R,4:R,5:{halign:"right",fontStyle:"bold"}}});
+    columnStyles:{5:{fontStyle:"bold"}},rc:[2,3,4,5]});
 
   need(40);y+=6;
   const r=c.reste>=0?["À rembourser (par le technicien)",c.reste]:["À payer (par l'entreprise)",-c.reste];
