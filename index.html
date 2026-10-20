@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Note de frais | A2CIM</title>
 <style>
-:root{--b:#1f4e79;--bg:#f4f6f9;--l:#d5dbe3;--t:#1b2430;--success:#28a745;--warn:#ffc107;--danger:#dc3545;}
+:root{--b:#1f4e79;--bg:#f4f6f9;--l:#d5dbe3;--t:#1b2430;--success:#28a745;--info:#17a2b8;--warn:#ffc107;--danger:#dc3545;}
 *{box-sizing:border-box}
 body{margin:0;font:15px system-ui,Arial,sans-serif;background:var(--bg);color:var(--t);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 header{background:var(--b);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;user-select:none;}
@@ -19,9 +19,10 @@ h2{margin:0 0 8px;font-size:14px;color:var(--b);text-transform:uppercase}
 label{font-size:12px;color:#556;display:block;margin-bottom:2px}
 input,select,button{font:inherit;padding:8px;border:1px solid var(--l);border-radius:6px;width:100%;background:#fff;color:var(--t)}
 input:disabled,select:disabled{background:#e8edf3;color:#888;}
-button{background:var(--b);color:#fff;border:0;cursor:pointer;width:auto;transition:opacity 0.2s;}
+button{background:var(--b);color:#fff;border:0;cursor:pointer;width:auto;transition:opacity 0.2s;margin-right:4px;margin-bottom:4px;}
 button:hover{opacity:0.9}
 button.s{background:#e8edf3;color:var(--b)}
+button.i{background:var(--info);color:#fff}
 button.d{background:var(--danger);color:#fff}
 button.v{background:var(--success);color:#fff}
 .tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:540px}
@@ -30,7 +31,7 @@ th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}t
 .chips button{background:#e8edf3;color:var(--b);padding:6px 10px;font-size:13px}
 .big{font-size:20px;font-weight:700;color:var(--b)}
 .badge{padding:4px 8px;border-radius:12px;font-size:11px;font-weight:bold;color:#fff;}
-.bg-brouillon{background:#6c757d;} .bg-soumise{background:var(--warn);color:#000;} .bg-validee{background:var(--success);}
+.bg-brouillon{background:#6c757d;} .bg-soumise{background:var(--warn);color:#000;} .bg-verifiee{background:var(--info);} .bg-validee{background:var(--success);} .bg-refusee{background:var(--danger);}
 .x{padding:2px 8px;background:var(--danger)}
 .mode-local-banner{background:var(--warn);color:#000;text-align:center;padding:5px;font-weight:bold;font-size:12px;}
 @media print{header,.np,button,.mode-local-banner{display:none!important}body{background:#fff}section{border:0;padding:0}input,select{border:0;padding:0}}
@@ -41,7 +42,7 @@ th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}t
 <header><b id="logo-trigger" title="Cliquez 5 fois pour activer/désactiver le mode local">Note de frais</b><span id="us">Chargement...</span></header>
 <main id="v"></main>
 
-<script src="config.js?v=3"></script>
+<script src="config.js?v=4"></script>
 <script type="module">
 "use strict";
 
@@ -83,16 +84,25 @@ const S = {
 };
 
 const app = initializeApp(firebaseConfig);
-
-// Initialisation d'App Check avec ta clé reCAPTCHA
 const appCheck = initializeAppCheck(app, {
   provider: new ReCaptchaEnterpriseProvider('6LfmmPgtAAAAAFYAuMK-OEHB0M8PlWibs9h94GBJ'),
   isTokenAutoRefreshEnabled: true
 });
-
 const auth = getAuth(app);
 const db = getFirestore(app);
 let unsubscribeSnapshot = null;
+
+const SOC = Object.assign({nom:"",adr:"",contact:"",ids:"",logo:"",lw:0,lh:0}, window.SOCIETE||{});
+const socOf = () => SOC;
+const fp = n => {const[i,d]=r2(n).toFixed(2).split(".");return i.replace(/\B(?=(\d{3})+$)/g," ")+","+d};
+
+function logo(f){return new Promise((ok,ko)=>{const r=new FileReader();r.onerror=ko;r.onload=()=>{const i=new Image();i.onerror=ko;i.onload=()=>{
+  const k=Math.min(1,300/i.width,150/i.height),w=Math.round(i.width*k),h=Math.round(i.height*k),c=document.createElement("canvas");
+  c.width=w;c.height=h;c.getContext("2d").drawImage(i,0,0,w,h);ok({logo:c.toDataURL("image/png"),lw:w,lh:h})};i.src=r.result};r.readAsDataURL(f)})}
+async function loadLogo(){
+  try{const r=await fetch("logo.png");if(!r.ok)return;Object.assign(SOC,await logo(await r.blob()))}catch{}
+}
+const ready = loadLogo();
 
 let clickCount = 0;
 let clickTimer;
@@ -103,7 +113,7 @@ $("#logo-trigger").addEventListener("click", () => {
   if (clickCount === 5) {
     S.isLocalMode = !S.isLocalMode;
     store.set("ndf_local_mode", S.isLocalMode);
-    alert(S.isLocalMode ? "MODE LOCAL ACTIVÉ : Vos notes sont privées et non synchronisées." : "MODE PARTAGÉ ACTIVÉ : Synchronisation Cloud reprise.");
+    alert(S.isLocalMode ? "MODE LOCAL ACTIVÉ : Vos notes sont privées." : "MODE PARTAGÉ ACTIVÉ.");
     location.reload();
   }
 });
@@ -137,7 +147,7 @@ async function initSync() {
 }
 
 const cur = () => S.notes.find(n => n.id === S.id);
-const newNote = () => ({id: uid(), nom: S.profil.nom, service: S.profil.service, du: today(), au: today(), pays: "Maroc", devise: "MAD", taux: 1, objet: "", avances: [], deps: [], statut: "Brouillon", supprime: false, upd: Date.now()});
+const newNote = () => ({id: uid(), nom: S.profil.nom, service: S.profil.service, du: today(), au: today(), pays: "Maroc", devise: "MAD", taux: 1, objet: "", avances: [], deps: [], statut: "Brouillon", motif_refus: "", supprime: false, upd: Date.now()});
 
 function calc(n) {
   const loc = n.devise === "MAD", t = loc ? 1 : (+n.taux || 0);
@@ -174,7 +184,7 @@ function list() {
       <td>${fd(n.du)}</td>
       <td>${esc(n.nom)} - ${esc(n.objet)}</td>
       <td class="n">${f2(calc(n).tot)}</td>
-      <td><span class="badge bg-${n.statut.toLowerCase()}">${n.statut}</span></td>
+      <td><span class="badge bg-${n.statut.toLowerCase().replace('é','e')}">${n.statut}</span></td>
       <td><button class="s" data-a="open" data-i="${esc(n.id)}">Ouvrir</button></td>
     </tr>`).join("");
   
@@ -196,14 +206,29 @@ function edit(n) {
   const I = (k, l, t="text") => `<div><label>${l}</label><input data-k="${k}" type="${t}" value="${esc(n[k])}" ${lockAttr}></div>`;
   const opts = Object.keys(PAYS).map(p => `<option ${p===n.pays?"selected":""}>${esc(p)}</option>`).join("");
   
-  let actionButtons = `<button class="s" data-a="back">← Retour</button>`;
-  if (!locked) actionButtons += ` <button class="s" data-a="soumettre">Soumettre</button> <button class="v" data-a="valider">Valider (Patron)</button>`;
+  let actionButtons = `<button class="s" data-a="back">← Retour</button> <button data-a="xls">Excel</button> <button class="s" data-a="pdf">PDF</button>`;
+  
+  if (!locked) {
+      if (n.statut === 'Brouillon' || n.statut === 'Refusée') {
+          actionButtons += ` <button class="s" data-a="soumettre">Soumettre</button>`;
+      } else if (n.statut === 'Soumise') {
+          actionButtons += ` <button class="i" data-a="verifier">Vérifier (Compta)</button> <button class="d" data-a="refuser">Refuser</button>`;
+      } else if (n.statut === 'Vérifiée') {
+          actionButtons += ` <button class="v" data-a="valider">Valider (Patron)</button> <button class="d" data-a="refuser">Refuser</button>`;
+      }
+  }
   actionButtons += ` <button class="d" data-a="del">Supprimer</button>`;
+
+  let alertBox = "";
+  if (n.statut === 'Refusée' && n.motif_refus) {
+      alertBox = `<div style="background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-bottom:12px;border:1px solid #f5c6cb;"><b>⚠️ Note refusée :</b> ${esc(n.motif_refus)}<br><small>Veuillez corriger et cliquer sur "Soumettre".</small></div>`;
+  }
 
   const dp = n.deps.map((x, i) => `<tr><td>${fd(x.d)}</td><td>${esc(x.desc)}</td><td class="n">${f2(x.m)}</td><td class="n">${f2(c.dh[i])}</td><td>${locked?'':`<button class="x np" data-a="rmdep" data-i="${i}">×</button>`}</td></tr>`).join("");
 
   return `<p class="np">${actionButtons}</p>
-<section><h2>En-tête de la Note <span class="badge bg-${n.statut.toLowerCase()} float-right">${n.statut}</span></h2>
+${alertBox}
+<section><h2>En-tête de la Note <span class="badge bg-${n.statut.toLowerCase().replace('é','e')} float-right">${n.statut}</span></h2>
 <div class="g">${I("nom","Nom / Fonction")}${I("service","Service")}${I("du","Du","date")}${I("au","Au","date")}
 <div><label>Pays</label><select data-k="pays" ${lockAttr}>${opts}</select></div>${I("objet","Objet de mission")}
 </div></section>
@@ -230,6 +255,8 @@ document.addEventListener("click", async e => {
     
     if (!n) return;
 
+    if (a === "pdf") return await pdf(n);
+    if (a === "xls") return await xls(n);
     if (a === "chip") { $("#dd").value = b.dataset.v; return $("#dm").focus(); }
     
     if (a === "adddep") {
@@ -243,20 +270,53 @@ document.addEventListener("click", async e => {
     
     if (a === "soumettre") {
       n.statut = "Soumise";
+      n.motif_refus = ""; 
       return await persist(n);
+    }
+
+    if (a === "verifier") {
+      if (S.isLocalMode) {
+         n.statut = "Vérifiée"; return await persist(n); 
+      }
+      const pin = prompt("Code secret Compta (PIN) pour certifier les reçus :");
+      if (!pin) return;
+      try {
+        await updateDoc(doc(db, "notes", n.id), { statut: "Vérifiée", action_pin: pin });
+        alert("Note vérifiée par la comptabilité.");
+      } catch (err) {
+        alert("Échec. Code PIN incorrect.");
+      }
     }
 
     if (a === "valider") {
       if (S.isLocalMode) {
          n.statut = "Validée"; return await persist(n); 
       }
-      const pin = prompt("Code secret de validation Patron (PIN) :");
+      const pin = prompt("Code secret Patron (PIN) pour valider :");
       if (!pin) return;
       try {
         await updateDoc(doc(db, "notes", n.id), { statut: "Validée", action_pin: pin });
         alert("Note validée avec succès.");
       } catch (err) {
-        alert("Échec de la validation. Code PIN incorrect ou droits insuffisants.");
+        alert("Échec. Code PIN incorrect ou droits insuffisants.");
+      }
+    }
+
+    if (a === "refuser") {
+      if (S.isLocalMode) {
+         const motif = prompt("Motif du refus (ex: Justificatif manquant) :");
+         if (!motif) return;
+         n.statut = "Refusée"; n.motif_refus = motif; return await persist(n); 
+      }
+      const pin = prompt("Code secret (Compta ou Patron) pour refuser :");
+      if (!pin) return;
+      const motif = prompt("Motif du refus (ex: Justificatif manquant) :");
+      if (!motif) return;
+      try {
+        await updateDoc(doc(db, "notes", n.id), { statut: "Refusée", motif_refus: motif, action_pin: pin });
+        alert("Note refusée.");
+      } catch (err) {
+        alert("Échec. Code PIN incorrect.");
       }
     }
 
@@ -274,7 +334,7 @@ document.addEventListener("click", async e => {
         await updateDoc(doc(db, "notes", n.id), { supprime: true, action_pin: pin });
         S.id = null; render();
       } catch (err) {
-        alert("Échec de la suppression. Code PIN incorrect.");
+        alert("Échec. Code PIN incorrect.");
       }
     }
   } catch (err) { alert(err.message); }
@@ -287,6 +347,159 @@ document.addEventListener("change", e => {
   if (k === "nom" || k === "service") { S.profil[k] = n[k]; store.set("ndf_profil", S.profil); }
   persist(n);
 });
+
+async function xls(n){
+  await ready;
+  const c = calc(n);
+  if(!window.ExcelJS) await new Promise((ok,ko)=>{
+    const s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+    s.onload=ok; s.onerror=()=>ko(new Error("Connexion internet requise."));
+    document.head.appendChild(s);
+  });
+  const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet((n.nom||"Note").replace(/[\\\/?*\[\]:]/g," ").slice(0,30)||"Note");
+  ws.columns = [{width:15},{width:28},{width:14},{width:14},{width:15},{width:18}];
+  ws.pageSetup = {paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0};
+  const BD = {top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  const D = "dd/mm/yyyy", M = "#,##0.00", dt = d => d?new Date(d+"T00:00:00Z"):null;
+  const put = (a,v,o={})=>{const x=ws.getCell(a);x.value=v;x.font={name:"Arial",size:10,bold:!!o.b};
+    if(o.f)x.numFmt=o.f;if(o.g)x.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE8EDF3"}};return x};
+  const box = r => ["A","B","C","D","E","F"].forEach(l=>ws.getCell(l+r).border=BD);
+
+  const title = n.statut === 'Validée' ? "NOTE DE FRAIS" : "NOTE DE FRAIS (PROVISOIRE)";
+  put("A2", title, {b:1}); ws.getCell("A2").font={name:"Arial",size:14,bold:true};
+  
+  const so = socOf(n);
+  [so.nom,so.adr,so.contact,so.ids].forEach((t,i)=>{const a="D"+(i+1);put(a,t||"",{b:i==0});ws.mergeCells(a+":F"+(i+1));
+    ws.getCell(a).alignment={horizontal:"right"};if(i==0)ws.getCell(a).font={name:"Arial",size:12,bold:true}});
+  if(so.logo){const k=Math.min(1,150/so.lw,40/so.lh);ws.addImage(wb.addImage({base64:so.logo,extension:"png"}),{tl:{col:0,row:2},ext:{width:so.lw*k,height:so.lh*k}})}
+  
+  put("A5","Nom de l'Employe /fonction");put("C5",n.nom,{b:1});
+  put("A6","Service / Department");put("C6",n.service,{b:1});
+  put("A7","Période");put("C7",dt(n.du),{f:D});put("D7","AU",{b:1});put("E7",dt(n.au),{f:D});
+  put("A8","Destination / Objet Déplacement");put("C8",n.pays,{b:1});put("D8",n.objet,{b:1});
+  put("A9","AVANCES",{b:1});ws.mergeCells("A9:B9");
+  ["Date","Montant","","Devise","Cours","débit compte"].forEach((h,i)=>put("ABCDEF"[i]+"10",h,{b:1,g:1}));box(10);
+
+  const na=Math.max(n.avances.length,3),av0=11,avN=av0+na-1;
+  const dep0=avN+4,nl=Math.max(n.deps.length,12),depN=dep0+nl-1;
+  const totR=depN+2,avR=totR+2,remR=avR+1,payR=avR+2,tx="$F$"+remR;
+
+  for(let i=0;i<na;i++){
+    const r=av0+i,a=n.avances[i];box(r);if(!a)continue;
+    put("A"+r,dt(a.d),{f:D});put("F"+r,a.m,{f:M});put("D"+r,n.devise);
+    if(c.loc){put("B"+r,{formula:"F"+r,result:a.m},{f:M})}
+    else{put("E"+r,{formula:tx,result:c.t},{f:"0.0000"});
+      put("B"+r,{formula:`IF(${tx}>0,ROUND(F${r}/${tx},2),0)`,result:c.t?r2(a.m/c.t):0},{f:M})}
+  }
+  put("A"+(avN+2),"DEPENSES",{b:1});ws.mergeCells(`A${avN+2}:B${avN+2}`);
+  ["DATE","DESCRIPTION","paiement cash","paiement CARTE","paiment autre","Total depense"].forEach((h,i)=>put("ABCDEF"[i]+(avN+3),h,{b:1,g:1}));box(avN+3);
+
+  const sums={C:0,D:0,E:0};
+  for(let i=0;i<nl;i++){
+    const r=dep0+i,x=n.deps[i];box(r);if(!x)continue;
+    const col={cash:"C",carte:"D",autre:"E"}[x.mode]||"C",dh=c.dh[i];sums[col]+=dh;
+    put("A"+r,dt(x.d),{f:D});put("B"+r,x.desc);
+    put(col+r,x.cur==="X"&&!c.loc?{formula:`ROUND(${x.m}*${tx},2)`,result:dh}:x.m,{f:M});
+    put("F"+r,{formula:`SUM(C${r}:E${r})`,result:dh},{f:M});
+  }
+  put("B"+totR,"TOTAL Dépenses",{b:1});
+  ["C","D","E"].forEach(l=>put(l+totR,{formula:`SUM(${l}${dep0}:${l}${depN})`,result:r2(sums[l])},{b:1,f:M}));
+  put("F"+totR,{formula:`SUM(F${dep0}:F${depN})`,result:c.tot},{b:1,f:M});
+  put("B"+avR,"Avance");put("F"+avR,{formula:`SUM(F${av0}:F${avN})`,result:c.av},{b:1,f:M});
+  put("B"+remR,"A rembourser");put("C"+remR,{formula:`MAX(F${avR}-F${totR},0)`,result:Math.max(c.reste,0)},{b:1,f:M});
+  put("E"+remR,"Tx change",{b:1});put("F"+remR,c.t,{b:1,f:"0.0000"});
+  put("B"+payR,"A payer");put("C"+payR,{formula:`MAX(F${totR}-F${avR},0)`,result:Math.max(-c.reste,0)},{b:1,f:M});
+  put("E"+payR,"Total dépense "+n.devise,{b:1});
+  put("F"+payR,{formula:`IF(${tx}>0,ROUND(F${totR}/${tx},2),0)`,result:c.dev},{b:1,f:M});
+
+  const s=payR+2;
+  put("A"+s,"Signature",{b:1});put("C"+s,"Signature",{b:1});
+  put("A"+(s+1),"Employé",{b:1});put("C"+(s+1),"Direction",{b:1});
+  
+  if (n.statut === 'Validée') {
+    put("C"+(s+2), "✓ VALIDÉE", {b:1});
+  } else {
+    put("C"+(s+2), "En attente de validation", {b:0});
+  }
+
+  ws.getRow(s+2).height=45;["A","B","C","D"].forEach(l=>ws.getCell(l+(s+2)).border=BD);
+
+  const buf=await wb.xlsx.writeBuffer(),a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  a.download="Note_de_Frais_"+((n.nom||"technicien").replace(/\W+/g,"_"))+"_"+n.du+".xlsx";
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+const lib = src => new Promise((ok,ko)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>ko(new Error("Connexion internet requise."));document.head.appendChild(s)});
+async function pdf(n){
+  await ready;
+  if(!window.jspdf){
+    await lib("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+    await lib("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
+  }
+  const c=calc(n),so=socOf(n),dev=n.devise,doc=new window.jspdf.jsPDF({unit:"mm",format:"a4"});
+  const W=210,M=14,BL=[31,78,121],GR=[232,237,243];let y=14;
+  const base={margin:{left:M,right:M},theme:"grid",styles:{fontSize:9,cellPadding:1.8,textColor:30,lineColor:[200,206,214]},headStyles:{fillColor:BL,textColor:255},footStyles:{fillColor:GR,textColor:30,fontStyle:"bold"}};
+  const T=o=>{const rc=o.rc||[];doc.autoTable({...base,...o,styles:{...base.styles,...(o.styles||{})},didParseCell:d=>{if(rc.includes(d.column.index))d.cell.styles.halign="right"}});y=doc.lastAutoTable.finalY};
+  const need=h=>{if(y+h>280){doc.addPage();y=16}};
+  const sec=t=>{need(30);y+=7;doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(10).text(t,M,y);y+=1.5};
+
+  if(so.logo){const k=Math.min(45/so.lw,20/so.lh);doc.addImage(so.logo,"PNG",M,y,so.lw*k,so.lh*k)}
+  doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(13).text(so.nom||"",W-M,y+4,{align:"right"});
+  doc.setTextColor(80).setFont("helvetica","normal").setFontSize(8.5);
+  [so.adr,so.contact,so.ids].filter(Boolean).forEach((t,i)=>doc.text(t,W-M,y+10+i*4.5,{align:"right"}));
+  doc.setDrawColor(...BL).setLineWidth(.6).line(M,38,W-M,38);
+  
+  const title = n.statut === 'Validée' ? "NOTE DE FRAIS" : "NOTE DE FRAIS (PROVISOIRE)";
+  doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(17).text(title,W/2,48,{align:"center"});
+
+  T({startY:54,body:[["Nom / fonction",n.nom],["Service / Department",n.service],["Période","du "+fd(n.du)+" au "+fd(n.au)],["Destination / objet",n.pays+(n.objet?" - "+n.objet:"")]]
+    .concat(c.loc?[]:[["Devise / taux de change",dev+" : 1 "+dev+" = "+String(c.t).replace(".",",")+" DH"]]),
+    columnStyles:{0:{fontStyle:"bold",fillColor:GR,cellWidth:52}}});
+
+  sec("AVANCES");
+  const ex=c.loc?[]:[""];
+  T({startY:y,head:[["Date","Montant (DH)"].concat(c.loc?[]:["Équivalent "+dev])],
+    body:n.avances.length?n.avances.map(a=>[fd(a.d),fp(a.m)].concat(c.loc?[]:[c.t?fp(a.m/c.t)+" "+dev:"-"])):[["-","0,00"].concat(ex)],
+    rc:[1,2]});
+
+  const sm={cash:0,carte:0,autre:0};n.deps.forEach((x,i)=>{sm[x.mode]=(sm[x.mode]||0)+c.dh[i]});
+  const cell=(x,m)=>x.mode===m?(x.cur==="X"&&!c.loc?fp(x.m)+" "+dev:fp(x.m)):"";
+  sec("DÉPENSES");
+  T({startY:y,head:[["Date","Description","Paiement cash","Paiement carte","Paiement autre","Total (DH)"]],
+    body:n.deps.map((x,i)=>[fd(x.d),x.desc,cell(x,"cash"),cell(x,"carte"),cell(x,"autre"),fp(c.dh[i])]),
+    foot:[["","TOTAL Dépenses",fp(sm.cash),fp(sm.carte),fp(sm.autre),fp(c.tot)]],showFoot:"lastPage",
+    columnStyles:{5:{fontStyle:"bold"}},rc:[2,3,4,5]});
+
+  need(40);y+=6;
+  const r=c.reste>=0?["À rembourser (par le technicien)",c.reste]:["À payer (par l'entreprise)",-c.reste];
+  T({startY:y,margin:{left:W/2,right:M},
+    body:[["Total dépenses (DH)",fp(c.tot)]].concat(c.loc?[]:[["Total dépenses ("+dev+")",fp(c.dev)]],[["Avance (DH)",fp(c.av)],[r[0],fp(r[1])]]),
+    columnStyles:{0:{fontStyle:"bold",fillColor:GR},1:{halign:"right",fontStyle:"bold"}}});
+
+  need(45);y+=8;
+  const bx=(x,t, isDir)=>{
+    doc.setDrawColor(150).setLineWidth(.3).rect(x,y,85,28);
+    doc.setTextColor(30).setFont("helvetica","bold").setFontSize(9).text(t,x+3,y+5);
+    if (isDir) {
+      if (n.statut === 'Validée') {
+        doc.setTextColor(40, 167, 69).setFontSize(10).text("✓ VALIDÉE", x+3, y+15);
+      } else {
+        doc.setTextColor(200, 50, 50).setFontSize(10).text("En attente de validation", x+3, y+15);
+      }
+    }
+  };
+  bx(M,"Signature Employé", false); bx(W-M-85,"Signature Direction", true); y+=32;
+
+  const N=doc.getNumberOfPages();
+  for(let i=1;i<=N;i++){
+    doc.setPage(i).setFont("helvetica","normal").setFontSize(8).setTextColor(120);
+    doc.text((so.nom?so.nom+" - ":"")+"Note de frais "+(n.nom||""),M,290);
+    doc.text("Page "+i+"/"+N,W-M,290,{align:"right"});
+  }
+  doc.save("Note_de_Frais_"+((n.nom||"technicien").replace(/\W+/g,"_"))+"_"+n.du+".pdf");
+}
 
 initSync();
 render();
