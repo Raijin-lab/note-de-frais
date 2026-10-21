@@ -12,6 +12,8 @@ window.SOCIETE = {
   contact: "www.a2cim.net",
   ids: "",
 
+  patron: "BRUNO BORIAS",   // nom du patron : signature électronique de la Direction après validation
+
   mode: "shared",
 
   firebase: {
