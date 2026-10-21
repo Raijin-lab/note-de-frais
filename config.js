@@ -1,12 +1,31 @@
 /* ================================================================
-   CONFIGURATION DE LA SOCIÉTÉ — à remplir une seule fois par l'administrateur.
-   Ces informations apparaissent dans l'en-tête du PDF et de l'Excel.
-   Les techniciens ne peuvent pas les modifier depuis l'application.
-   Le logo : placez un fichier nommé  logo.png  dans ce même dossier.
+   CONFIGURATION — VERSION PARTAGÉE (équipe, comptable, patron)
+   À remplir une seule fois par l'administrateur.
+   Le logo : fichier  logo.png  dans ce même dossier.
+   Le patron peut passer en mode privé local en cliquant 5 fois
+   sur le titre « Note de frais » (il suffit de recliquer 5 fois
+   pour revenir au mode partagé).
    ================================================================ */
 window.SOCIETE = {
   nom: "A2CIM",
-  adr: "Lot N°20 Zone Industrielle Ouled Salah - 27182 Bouskoura Casablanca- Maroc",       // ex. : "12 rue ..., Casablanca"
-  contact: "www.a2cim.net",   // ex. : "Tél : 05 22 00 00 00 - contact@exemple.ma"
-  ids: ""        // ex. : "ICE : 000000000000000 - RC : 00000"
+  adr: "Lot N°20 Zone Industrielle Ouled Salah - 27182 Bouskoura Casablanca- Maroc",
+  contact: "www.a2cim.net",
+  ids: "",
+
+  mode: "shared",
+
+  firebase: {
+    apiKey: "AIzaSyBrakDXYb-vgTTgEoIjwIVaCttRrgwj4aU",
+    authDomain: "note-de-frais-a2cim.firebaseapp.com",
+    projectId: "note-de-frais-a2cim",
+    storageBucket: "note-de-frais-a2cim.firebasestorage.app",
+    messagingSenderId: "298324155092",
+    appId: "1:298324155092:web:390481b64d14b316383941"
+  },
+
+  appCheckKey: "6LfmmPgtAAAAAFYAuMK-OEHB0M8PlWibs9h94GBJ",
+  appCheckEnterprise: true,
+
+  pays: {
+  }
 };
