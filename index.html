@@ -56,6 +56,22 @@ const SOC=Object.assign({nom:"",adr:"",contact:"",ids:"",logo:"",lw:0,lh:0},wind
 const socOf=()=>SOC;
 let fb=null;
 
+const sig=nm=>{
+  const w=String(nm||"").split(/[-\/,(]/)[0].trim().split(/\s+/).filter(Boolean);
+  if(w.length<2)return(w[0]||"").toUpperCase();
+  return w[0][0].toUpperCase()+"."+w.slice(1).join(" ").toUpperCase();
+};
+const sgd=iso=>{const d=new Date(iso);return d.toLocaleDateString("fr-FR")+" "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})};
+async function fpr(n){
+  try{
+    const o=JSON.stringify([n.id,n.nom,n.du,n.au,n.pays,n.devise,+n.taux||0,
+      (n.avances||[]).map(a=>[a.d,+a.m]),(n.deps||[]).map(x=>[x.d,x.desc,+x.m,x.cur,x.mode]),
+      n.sign?.date||"",n.valid?.date||""]);
+    const h=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(o));
+    const x=[...new Uint8Array(h)].slice(0,4).map(b=>b.toString(16).padStart(2,"0")).join("").toUpperCase();
+    return x.slice(0,4)+"-"+x.slice(4);
+  }catch{return""}
+}
 const fp=n=>{const[i,d]=r2(n).toFixed(2).split(".");return i.replace(/\B(?=(\d{3})+$)/g," ")+","+d};
 function logo(f){return new Promise((ok,ko)=>{const r=new FileReader();r.onerror=ko;r.onload=()=>{const i=new Image();i.onerror=ko;i.onload=()=>{
   const k=Math.min(1,300/i.width,150/i.height),w=Math.round(i.width*k),h=Math.round(i.height*k),c=document.createElement("canvas");
@@ -136,7 +152,7 @@ function bar(n){
   const s=n.statut||"Brouillon";
   let h=`<section class="np"><b style="color:${ST[s]}">Statut : ${s}</b>`;
   if(n.verif?.date&&s!=="Brouillon")h+=` - vérifiée (compta) le ${fd(n.verif.date.slice(0,10))}`;
-  if(s==="Validée")h+=` - validée le ${fd((n.valid?.date||"").slice(0,10))}`;
+  if(s==="Validée")h+=` - validée le ${fd((n.valid?.date||"").slice(0,10))} - réf. de contrôle : <b id="ref">...</b>`;
   if(s==="Refusée")h+=` - motif : ${esc(n.valid?.motif||"")}`;
   h+="<br>";
   if(s==="Brouillon")h+=`<button data-a="submit">Soumettre</button>`;
@@ -148,6 +164,7 @@ function bar(n){
 function render(){
   const n=cur();
   $("#v").innerHTML=n?edit(n):list();
+  if(n&&SHARED&&n.statut==="Validée")fpr(n).then(v=>{const e=$("#ref");if(e)e.textContent=v||"-"});
   if(n&&SHARED&&(n.statut||"Brouillon")!=="Brouillon"){
     document.querySelectorAll("#v input,#v select").forEach(e=>e.disabled=true);
     document.querySelectorAll("#v .frm,#v .x").forEach(e=>e.remove());
@@ -221,8 +238,8 @@ document.addEventListener("click",async e=>{
       }
       S.notes=S.notes.filter(x=>x!==n);S.id=null;store.set(K+"notes",S.notes);return render();
     }
-    if(a==="submit"){if(!confirm("Soumettre cette note à la validation ? Elle ne sera plus modifiable."))return;n.statut="Soumise";delete n.verif;return persist(n)}
-    if(a==="reopen"){n.statut="Brouillon";delete n.verif;return persist(n)}
+    if(a==="submit"){if(!confirm("Soumettre cette note à la validation ? Elle ne sera plus modifiable."))return;n.statut="Soumise";delete n.verif;n.sign={nom:sig(n.nom),date:new Date().toISOString()};return persist(n)}
+    if(a==="reopen"){n.statut="Brouillon";delete n.verif;delete n.sign;return persist(n)}
     if(a==="verif"||a==="valid"||a==="reject"){
       let motif="";
       if(a==="reject"){motif=(prompt("Motif du refus :")||"").trim();if(!motif)return}
@@ -337,7 +354,24 @@ async function xls(n){
   put("A"+s,"Signature",{b:1});put("C"+s,"Signature",{b:1});
   put("A"+(s+1),"Employé",{b:1});put("C"+(s+1),"Direction",{b:1});
   ws.getRow(s+2).height=45;["A","B","C","D"].forEach(l=>ws.getCell(l+(s+2)).border=BD);
-  if(SHARED){const ok=n.statut==="Validée";put("C"+(s+2),ok?"VALIDÉE le "+fd((n.valid?.date||"").slice(0,10)):"En attente de validation",{b:ok})}
+  if(n.sign){
+    const x=ws.getCell("A"+(s+2));
+    x.value={richText:[
+      {text:n.sign.nom+"\n",font:{name:"Times New Roman",size:16,bold:true,italic:true,color:{argb:"FF1F4E79"}}},
+      {text:"Signé électroniquement le "+sgd(n.sign.date),font:{name:"Arial",size:8,color:{argb:"FF666666"}}}]};
+    x.alignment={wrapText:true,vertical:"middle"};
+    ws.mergeCells("A"+(s+2)+":B"+(s+2));
+  }
+  if(SHARED){
+    const ok=n.statut==="Validée",c2=ws.getCell("C"+(s+2));
+    if(ok&&CFG.patron){
+      c2.value={richText:[
+        {text:sig(CFG.patron)+"\n",font:{name:"Times New Roman",size:16,bold:true,italic:true,color:{argb:"FF1F4E79"}}},
+        {text:CFG.patron+" - Direction "+(so.nom||"")+"\nValidé électroniquement le "+sgd(n.valid.date),font:{name:"Arial",size:8,color:{argb:"FF666666"}}}]};
+      c2.alignment={wrapText:true,vertical:"middle"};ws.mergeCells("C"+(s+2)+":D"+(s+2));
+    }else put("C"+(s+2),ok?"VALIDÉE le "+fd((n.valid?.date||"").slice(0,10)):"En attente de validation",{b:ok});
+    if(ok){const rf=await fpr(n);if(rf)put("A"+(s+4),"Réf. de contrôle : "+rf)}
+  }
 
   const buf=await wb.xlsx.writeBuffer(),a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
@@ -395,14 +429,29 @@ async function pdf(n){
   need(45);y+=8;
   const bx=(x,t)=>{doc.setDrawColor(150).setLineWidth(.3).rect(x,y,85,28);doc.setTextColor(30).setFont("helvetica","bold").setFontSize(9).text(t,x+3,y+5)};
   bx(M,"Signature Employé");bx(W-M-85,"Signature Direction");
-  if(SHARED){const ok=n.statut==="Validée";doc.setFont("helvetica","bold").setFontSize(10).setTextColor(...(ok?[27,122,58]:[200,50,50])).text(ok?"VALIDÉE le "+fd((n.valid?.date||"").slice(0,10)):"En attente de validation",W-M-82,y+16)}
+  if(n.sign){
+    doc.setTextColor(...BL).setFont("times","bolditalic").setFontSize(18).text(n.sign.nom,M+4,y+16);
+    doc.setFont("helvetica","normal").setFontSize(7.5).setTextColor(100).text("Signé électroniquement le "+sgd(n.sign.date),M+4,y+24);
+  }
+  if(SHARED){
+    const ok=n.statut==="Validée",x0=W-M-82;
+    if(ok&&CFG.patron){
+      doc.setTextColor(...BL).setFont("times","bolditalic").setFontSize(18).text(sig(CFG.patron),x0,y+16);
+      doc.setFont("helvetica","normal").setFontSize(7.5).setTextColor(100).text(CFG.patron+" - Direction "+(so.nom||""),x0,y+21);
+      doc.text("Validé électroniquement le "+sgd(n.valid.date),x0,y+25);
+    }else{
+      doc.setFont("helvetica","bold").setFontSize(10).setTextColor(...(ok?[27,122,58]:[200,50,50])).text(ok?"VALIDÉE le "+fd((n.valid?.date||"").slice(0,10)):"En attente de validation",x0,y+16);
+    }
+  }
   y+=32;
 
+  const rf=SHARED&&n.statut==="Validée"?await fpr(n):"";
   const N=doc.getNumberOfPages();
   for(let i=1;i<=N;i++){
     doc.setPage(i).setFont("helvetica","normal").setFontSize(8).setTextColor(120);
     doc.text((so.nom?so.nom+" - ":"")+"Note de frais "+(n.nom||""),M,290);
     doc.text("Page "+i+"/"+N,W-M,290,{align:"right"});
+    if(rf)doc.text("Réf. de contrôle : "+rf,W/2,290,{align:"center"});
   }
   doc.save("Note_de_Frais_"+((n.nom||"technicien").replace(/\W+/g,"_"))+"_"+n.du+".pdf");
 }
