@@ -1,379 +1,299 @@
 <!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
+<html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1f4e79">
-<link rel="manifest" href="manifest.json">
-<title>Note de frais | A2CIM</title>
+<meta name="theme-color" content="#1f4e79"><link rel="manifest" href="manifest.json">
+<title>Note de frais</title>
 <style>
-:root{--b:#1f4e79;--bg:#f4f6f9;--l:#d5dbe3;--t:#1b2430;--success:#28a745;--info:#17a2b8;--warn:#ffc107;--danger:#dc3545;}
+:root{--b:#1f4e79;--bg:#f4f6f9;--l:#d5dbe3;--t:#1b2430}
 *{box-sizing:border-box}
 body{margin:0;font:15px system-ui,Arial,sans-serif;background:var(--bg);color:var(--t);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-header{background:var(--b);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;user-select:none;}
-header b{font-size:17px;cursor:pointer;}
-main{max-width:900px;margin:auto;padding:12px}
+header{background:var(--b);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+header b{font-size:17px}main{max-width:900px;margin:auto;padding:12px}
 section{background:#fff;border:1px solid var(--l);border-radius:10px;padding:12px;margin-bottom:12px}
 h2{margin:0 0 8px;font-size:14px;color:var(--b);text-transform:uppercase}
 .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
 label{font-size:12px;color:#556;display:block;margin-bottom:2px}
 input,select,button{font:inherit;padding:8px;border:1px solid var(--l);border-radius:6px;width:100%;background:#fff;color:var(--t)}
-input:disabled,select:disabled{background:#e8edf3;color:#888;}
-button{background:var(--b);color:#fff;border:0;cursor:pointer;width:auto;transition:opacity 0.2s;margin-right:4px;margin-bottom:4px;}
-button:hover{opacity:0.9}
-button.s{background:#e8edf3;color:var(--b)}
-button.i{background:var(--info);color:#fff}
-button.d{background:var(--danger);color:#fff}
-button.v{background:var(--success);color:#fff}
+button{background:var(--b);color:#fff;border:0;cursor:pointer;width:auto}
+button.s{background:#e8edf3;color:var(--b)}button.d{background:#b3261e}
 .tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:540px}
 th,td{border:1px solid var(--l);padding:5px 6px;text-align:left;font-size:13px}th{background:#e8edf3}
 .n{text-align:right}.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .chips button{background:#e8edf3;color:var(--b);padding:6px 10px;font-size:13px}
-.big{font-size:20px;font-weight:700;color:var(--b)}
-.badge{padding:4px 8px;border-radius:12px;font-size:11px;font-weight:bold;color:#fff;}
-.bg-brouillon{background:#6c757d;} .bg-soumise{background:var(--warn);color:#000;} .bg-verifiee{background:var(--info);} .bg-validee{background:var(--success);} .bg-refusee{background:var(--danger);}
-.x{padding:2px 8px;background:var(--danger)}
-.mode-local-banner{background:var(--warn);color:#000;text-align:center;padding:5px;font-weight:bold;font-size:12px;}
-@media print{header,.np,button,.mode-local-banner{display:none!important}body{background:#fff}section{border:0;padding:0}input,select{border:0;padding:0}}
-</style>
-</head>
+.big{font-size:20px;font-weight:700;color:var(--b)}.warn{color:#b3261e;font-weight:600}
+.x{padding:2px 8px;background:#b3261e}
+@media print{#banner,header,.np,button{display:none!important}body{background:#fff}section{border:0;padding:0}input,select{border:0;padding:0}}
+</style></head>
 <body>
-<div id="banner-local" class="mode-local-banner" style="display:none;">🔒 MODE LOCAL PRIVÉ ACTIVÉ (Aucune synchronisation Cloud)</div>
-<header><b id="logo-trigger" title="Cliquez 5 fois pour activer/désactiver le mode local">Note de frais</b><span id="us">Chargement...</span></header>
+<div id="banner" style="display:none;background:#ffc107;color:#000;text-align:center;padding:5px;font-weight:700;font-size:12px">MODE LOCAL PRIVÉ - aucune synchronisation</div>
+<header><b id="trig" style="cursor:pointer;user-select:none" title="5 clics : mode local / partagé">Note de frais</b><span id="us"></span></header>
 <main id="v"></main>
-
-<script src="config.js?v=5"></script>
-<script type="module">
+<script src="config.js?v=6"></script>
+<script>
 "use strict";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBrakDXYb-vgTTgEoIjwIVaCttRrgwj4aU",
-  authDomain: "note-de-frais-a2cim.firebaseapp.com",
-  projectId: "note-de-frais-a2cim",
-  storageBucket: "note-de-frais-a2cim.firebasestorage.app",
-  messagingSenderId: "298324155092",
-  appId: "1:298324155092:web:390481b64d14b316383941"
+const CFG=window.SOCIETE||{},FORCED=CFG.mode==="local";
+let flag="";try{flag=localStorage.getItem("ndf_mode")||""}catch{}
+const LOCAL=FORCED||flag==="local",SHARED=!LOCAL,K=LOCAL?"ndf_l_":"ndf_";
+const FB=SHARED?(CFG.firebase||null):null;
+const PAYS={"Maroc":"MAD","France":"EUR","Espagne":"EUR","Allemagne":"EUR","Italie":"EUR","Belgique":"EUR","Portugal":"EUR","Royaume-Uni":"GBP","États-Unis":"USD","Canada":"CAD","Tunisie":"TND","Algérie":"DZD","Égypte":"EGP","Mauritanie":"MRU","Sénégal":"XOF","Côte d'Ivoire":"XOF","Arabie saoudite":"SAR","Émirats arabes unis":"AED","Qatar":"QAR","Turquie":"TRY","Chine":"CNY","Gabon":"XAF","Cameroun":"XAF","Congo":"XAF","Mali":"XOF","Burkina Faso":"XOF","Guinée":"GNF","Nigeria":"NGN","Ghana":"GHS","Kenya":"KES","Libye":"LYD","Jordanie":"JOD","Koweït":"KWD","Oman":"OMR","Bahreïn":"BHD","Liban":"LBP","Suisse":"CHF","Pays-Bas":"EUR","Pologne":"PLN","Roumanie":"RON","Inde":"INR","Afrique du Sud":"ZAR","Brésil":"BRL"};
+const CH=["PETIT DEJEUNER","DEJEUNER","DINER","TRAIN","AUTOROUTES","GASOIL","TAXI","PARKING","HOTEL","RECHARGE","DIVERS"];
+const $=s=>document.querySelector(s);
+const r2=n=>Math.round((+n+Number.EPSILON)*100)/100;
+const f2=n=>r2(n).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=v=>parseFloat(String(v).replace(/\s/g,"").replace(",","."));
+const fd=d=>d?d.split("-").reverse().join("/"):"";
+const today=()=>new Date().toISOString().slice(0,10);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const store={
+  get:(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch{return d}},
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{alert("Stockage plein : exportez puis supprimez d'anciennes notes.")}}
 };
+const S={notes:store.get(K+"notes",[]),id:null,profil:store.get(K+"profil",{nom:"",service:""}),pays:store.get(K+"pays",{})};
+S.f={q:"",m:"",st:""};
+Object.assign(PAYS,S.pays,CFG.pays||{});
+const SOC=Object.assign({nom:"",adr:"",contact:"",ids:"",logo:"",lw:0,lh:0},window.SOCIETE||{});
+const socOf=()=>SOC;
+let fb=null;
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const PAYS = {"Maroc":"MAD","France":"EUR","Tunisie":"TND"}; 
-const CH = ["PETIT DEJEUNER","DEJEUNER","DINER","TRAIN","AUTOROUTES","GASOIL","TAXI","PARKING","HOTEL","RECHARGE","DIVERS"];
-const $ = s => document.querySelector(s);
-const r2 = n => Math.round((+n + Number.EPSILON) * 100) / 100;
-const f2 = n => r2(n).toLocaleString("fr-FR", {minimumFractionDigits:2, maximumFractionDigits:2});
-const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const num = v => parseFloat(String(v).replace(/\s/g,"").replace(",","."));
-const fd = d => d ? d.split("-").reverse().join("/") : "";
-const today = () => new Date().toISOString().slice(0,10);
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-
-const store = {
-  get: (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } },
-  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { alert("Stockage local plein."); } }
-};
-
-const S = {
-  notes: store.get("ndf_notes", []),
-  id: null,
-  profil: store.get("ndf_profil", { nom: "ZOUHAIR BADIS", service: "A2CIM" }),
-  isLocalMode: store.get("ndf_local_mode", false)
-};
-
-const app = initializeApp(firebaseConfig);
-const appCheck = initializeAppCheck(app, {
-  provider: new ReCaptchaEnterpriseProvider('6LfmmPgtAAAAAFYAuMK-OEHB0M8PlWibs9h94GBJ'),
-  isTokenAutoRefreshEnabled: true
-});
-const auth = getAuth(app);
-const db = getFirestore(app);
-let unsubscribeSnapshot = null;
-
-const SOC = Object.assign({nom:"",adr:"",contact:"",ids:"",logo:"",lw:0,lh:0}, window.SOCIETE||{});
-const socOf = () => SOC;
-const fp = n => {const[i,d]=r2(n).toFixed(2).split(".");return i.replace(/\B(?=(\d{3})+$)/g," ")+","+d};
-
+const fp=n=>{const[i,d]=r2(n).toFixed(2).split(".");return i.replace(/\B(?=(\d{3})+$)/g," ")+","+d};
 function logo(f){return new Promise((ok,ko)=>{const r=new FileReader();r.onerror=ko;r.onload=()=>{const i=new Image();i.onerror=ko;i.onload=()=>{
   const k=Math.min(1,300/i.width,150/i.height),w=Math.round(i.width*k),h=Math.round(i.height*k),c=document.createElement("canvas");
   c.width=w;c.height=h;c.getContext("2d").drawImage(i,0,0,w,h);ok({logo:c.toDataURL("image/png"),lw:w,lh:h})};i.src=r.result};r.readAsDataURL(f)})}
 async function loadLogo(){
   try{const r=await fetch("logo.png");if(!r.ok)return;Object.assign(SOC,await logo(await r.blob()))}catch{}
 }
-const ready = loadLogo();
-
-let clickCount = 0;
-let clickTimer;
-$("#logo-trigger").addEventListener("click", () => {
-  clickCount++;
-  clearTimeout(clickTimer);
-  clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
-  if (clickCount === 5) {
-    S.isLocalMode = !S.isLocalMode;
-    store.set("ndf_local_mode", S.isLocalMode);
-    alert(S.isLocalMode ? "MODE LOCAL ACTIVÉ : Vos notes sont privées." : "MODE PARTAGÉ ACTIVÉ.");
-    location.reload();
-  }
-});
-
-async function initSync() {
-  if (S.isLocalMode) {
-    $("#banner-local").style.display = "block";
-    $("#us").innerHTML = "Mode Privé Local";
-    render();
-    return;
-  }
-
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      $("#us").innerHTML = "🟢 Connecté";
-      const q = query(collection(db, "notes"), where("supprime", "==", false));
-      unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-        const cloudNotes = [];
-        snapshot.forEach(doc => cloudNotes.push(doc.data()));
-        S.notes = cloudNotes.sort((a,b) => b.upd - a.upd);
-        store.set("ndf_notes", S.notes);
-        if(!S.id) render(); 
-      }, (error) => {
-        console.error("Erreur de synchronisation:", error);
-      });
-    } else {
-      $("#us").innerHTML = "🟠 Connexion...";
-      try { await signInAnonymously(auth); } catch (e) { console.error("Erreur Auth:", e); }
-    }
-  });
+const ready=loadLogo();
+const newNote=()=>({id:uid(),nom:S.profil.nom,service:S.profil.service,du:today(),au:today(),pays:"Maroc",devise:"MAD",taux:1,objet:"",avances:[],deps:[],statut:"Brouillon",upd:Date.now()});
+const cur=()=>S.notes.find(n=>n.id===S.id);
+function calc(n){
+  const loc=n.devise==="MAD",t=loc?1:(+n.taux||0);
+  const dh=n.deps.map(x=>x.cur==="X"&&!loc?r2(x.m*t):r2(x.m));
+  const tot=r2(dh.reduce((a,b)=>a+b,0)),av=r2(n.avances.reduce((a,x)=>a+ +x.m,0));
+  return{loc,t,dh,tot,av,reste:r2(av-tot),dev:t?r2(tot/t):0};
 }
 
-const cur = () => S.notes.find(n => n.id === S.id);
-const newNote = () => ({id: uid(), nom: S.profil.nom, service: S.profil.service, du: today(), au: today(), pays: "Maroc", devise: "MAD", taux: 1, objet: "", avances: [], deps: [], statut: "Brouillon", motif_refus: "", supprime: false, upd: Date.now()});
-
-function calc(n) {
-  const loc = n.devise === "MAD", t = loc ? 1 : (+n.taux || 0);
-  const dh = n.deps.map(x => x.cur === "X" && !loc ? r2(x.m * t) : r2(x.m));
-  const tot = r2(dh.reduce((a, b) => a + b, 0)), av = r2(n.avances.reduce((a, x) => a + +x.m, 0));
-  return { loc, t, dh, tot, av, reste: r2(av - tot), dev: t ? r2(tot / t) : 0 };
+/* ---------- Cloud partagé (Firebase) ---------- */
+let pend=false;
+const editing=()=>document.activeElement?.matches?.("#v input,#v select");
+const safeRender=()=>editing()?(pend=true):render();
+document.addEventListener("focusout",()=>{if(pend)setTimeout(()=>{if(!editing()){pend=false;render()}},80)});
+const clean=n=>{const{_d,...d}=n;return d};
+async function initFB(){
+  if(!FB)return;
+  try{
+    const V="https://www.gstatic.com/firebasejs/10.12.2/firebase-";
+    const [a,au,fs]=await Promise.all([import(V+"app.js"),import(V+"auth.js"),import(V+"firestore.js")]);
+    const app=a.initializeApp(FB);
+    if(CFG.appCheckKey){try{const ac=await import(V+"app-check.js");const P=CFG.appCheckEnterprise?ac.ReCaptchaEnterpriseProvider:ac.ReCaptchaV3Provider;ac.initializeAppCheck(app,{provider:new P(CFG.appCheckKey),isTokenAutoRefreshEnabled:true})}catch(e){console.error("AppCheck",e)}}
+    let db;try{db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})})}catch{db=fs.getFirestore(app)}
+    fb={fs,db,auth:au.getAuth(app),on:false};
+    await au.signInAnonymously(fb.auth);
+    fs.onSnapshot(fs.collection(db,"notes"),snap=>{
+      const m=new Map(snap.docs.map(d=>[d.id,d.data()]));
+      S.notes.filter(n=>n._d).forEach(n=>{const c=m.get(n.id);if(!c||n.upd>c.upd){m.set(n.id,n);push(n)}});
+      S.notes=[...m.values()].sort((x,y)=>y.upd-x.upd);
+      store.set(K+"notes",S.notes);fb.on=true;safeRender();
+    },e=>{console.error(e);if(fb)fb.on=false;render()});
+  }catch(e){console.error(e);fb=null;render()}
+}
+async function push(n){
+  if(!fb)return;
+  try{
+    await fb.fs.setDoc(fb.fs.doc(fb.db,"notes",n.id),clean(n));
+    const m=S.notes.find(x=>x.id===n.id);if(m&&m.upd===n.upd){delete m._d;store.set(K+"notes",S.notes)}
+  }catch(e){console.error(e);if(e.code==="permission-denied")alert("Enregistrement refusé : cette note est verrouillée (déjà validée).")}
+}
+/* Opération protégée : le code est vérifié par Firebase (règles), jamais par l'application */
+async function guard(id,kind,code,fn){
+  if(!fb||!navigator.onLine)throw new Error("Connexion internet requise pour cette opération.");
+  const r=fb.fs.doc(fb.db,"actions",id+"_"+kind);
+  try{await fb.fs.deleteDoc(r)}catch{}
+  try{await fb.fs.setDoc(r,{code,ts:fb.fs.serverTimestamp()})}catch(e){throw new Error(e.code==="permission-denied"?"Code incorrect.":(e.message||String(e)))}
+  try{await fn()}finally{try{await fb.fs.deleteDoc(r)}catch{}}
+}
+async function guardAny(id,kinds,code,fn){
+  let last;
+  for(const k of kinds){try{return await guard(id,k,code,fn)}catch(e){last=e;if(e.message!=="Code incorrect.")throw e}}
+  throw last;
+}
+function persist(n){n.upd=Date.now();n.statut=n.statut||"Brouillon";n._d=1;store.set(K+"notes",S.notes);push(n);render()}
+/* Mode local : sauvegarde / restauration par fichier */
+function backup(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S.notes)],{type:"application/json"}));a.download="Sauvegarde_notes_de_frais_"+today()+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000)}
+async function restore(f){
+  try{
+    const arr=JSON.parse(await f.text());if(!Array.isArray(arr))throw 0;
+    const m=new Map(S.notes.map(n=>[n.id,n]));
+    arr.forEach(n=>{if(n&&n.id&&Array.isArray(n.deps)&&Array.isArray(n.avances)){const c=m.get(n.id);if(!c||n.upd>c.upd)m.set(n.id,n)}});
+    S.notes=[...m.values()].sort((a,b)=>b.upd-a.upd);store.set(K+"notes",S.notes);render();alert("Sauvegarde restaurée.");
+  }catch{alert("Fichier de sauvegarde invalide.")}
 }
 
-async function persist(n) {
-  n.upd = Date.now();
-  if (S.isLocalMode) {
-    const idx = S.notes.findIndex(x => x.id === n.id);
-    if(idx > -1) S.notes[idx] = n; else S.notes.unshift(n);
-    store.set("ndf_notes", S.notes);
-  } else {
-    try {
-      const dataToSave = {...n}; delete dataToSave.action_pin; 
-      await setDoc(doc(db, "notes", n.id), dataToSave);
-    } catch (e) {
-      alert("Erreur de sauvegarde Cloud : " + e.message);
-    }
+/* ---------- Vues ---------- */
+const ST={Brouillon:"#8a6d00",Soumise:"#1f4e79",Validée:"#1b7a3a",Refusée:"#b3261e",Vérifiée:"#17a2b8"};
+function bar(n){
+  if(!SHARED)return"";
+  const s=n.statut||"Brouillon";
+  let h=`<section class="np"><b style="color:${ST[s]}">Statut : ${s}</b>`;
+  if(n.verif?.date&&s!=="Brouillon")h+=` - vérifiée (compta) le ${fd(n.verif.date.slice(0,10))}`;
+  if(s==="Validée")h+=` - validée le ${fd((n.valid?.date||"").slice(0,10))}`;
+  if(s==="Refusée")h+=` - motif : ${esc(n.valid?.motif||"")}`;
+  h+="<br>";
+  if(s==="Brouillon")h+=`<button data-a="submit">Soumettre</button>`;
+  if(s==="Soumise")h+=`<button data-a="verif">Vérifier (compta)</button> <button class="d" data-a="reject">Refuser</button> <button class="s" data-a="reopen">Repasser en brouillon</button>`;
+  if(s==="Vérifiée")h+=`<button data-a="valid">Valider (patron)</button> <button class="d" data-a="reject">Refuser</button>`;
+  if(s==="Refusée")h+=`<button class="s" data-a="reopen">Corriger (repasser en brouillon)</button>`;
+  return h+"</section>";
+}
+function render(){
+  const n=cur();
+  $("#v").innerHTML=n?edit(n):list();
+  if(n&&SHARED&&(n.statut||"Brouillon")!=="Brouillon"){
+    document.querySelectorAll("#v input,#v select").forEach(e=>e.disabled=true);
+    document.querySelectorAll("#v .frm,#v .x").forEach(e=>e.remove());
   }
-  render();
+  $("#us").textContent=LOCAL?"Mode local - privé":!FB?"Cloud non configuré":fb?.on?"Partagé - synchronisé":"Partagé - hors ligne";
 }
-
-function render() {
-  const n = cur();
-  $("#v").innerHTML = n ? edit(n) : list();
+function list(){
+  const f=S.f,q=f.q.toLowerCase();
+  const rows=S.notes.filter(n=>(!f.st||(n.statut||"Brouillon")===f.st)&&(!f.m||n.du.slice(0,7)===f.m)&&(!q||(n.nom+" "+n.pays+" "+n.objet).toLowerCase().includes(q)));
+  const nv=S.notes.filter(n=>n.statut==="Soumise").length;
+  const flt=SHARED?`<section class="np"><h2>Filtres</h2><div class="g"><div><label>Recherche (technicien, pays, objet)</label><input data-f="q" value="${esc(f.q)}"></div>
+    <div><label>Mois</label><input data-f="m" type="month" value="${esc(f.m)}"></div>
+    <div><label>Statut</label><select data-f="st">${["","Brouillon","Soumise","Vérifiée","Validée","Refusée"].map(x=>`<option value="${x}" ${x===f.st?"selected":""}>${x||"Tous"}</option>`).join("")}</select></div></div></section>`:"";
+  const t=rows.map(n=>{const s=n.statut||"Brouillon",i=esc(n.id);return`<tr><td>${fd(n.du)} - ${fd(n.au)}</td>${SHARED?`<td>${esc(n.nom)}</td>`:""}<td>${esc(n.pays)} ${esc(n.objet)}</td><td class="n">${f2(calc(n).tot)}</td>${SHARED?`<td style="color:${ST[s]};font-weight:600">${s}</td>`:""}<td class="np"><button class="s" data-a="open" data-i="${i}">Ouvrir</button> <button class="s" data-a="rpdf" data-i="${i}">PDF</button> <button class="s" data-a="rxls" data-i="${i}">Excel</button></td></tr>`}).join("");
+  const bk=LOCAL?` <button class="s" data-a="bk">Sauvegarder (fichier)</button> <label style="display:inline-block;padding:8px;border-radius:6px;cursor:pointer;background:#e8edf3;color:var(--b)">Restaurer<input id="rf" type="file" accept=".json" hidden></label>`:"";
+  return flt+`<section><h2>${SHARED?"Notes de frais partagées":"Mes notes de frais (privées)"}${nv&&SHARED?` - <span class="warn">${nv} à valider</span>`:""}</h2><p class="np"><button data-a="new">+ Nouvelle note</button>${bk}</p>`+
+    (t?`<div class="tw"><table><tr><th>Période</th>${SHARED?"<th>Technicien</th>":""}<th>Destination</th><th class="n">Total DH</th>${SHARED?"<th>Statut</th>":""}<th class="np"></th></tr>${t}</table></div>`:"<p>Aucune note.</p>")+`</section>`;
 }
-
-function list() {
-  const rows = S.notes.filter(n => !n.supprime).map(n => `
-    <tr>
-      <td>${fd(n.du)}</td>
-      <td>${esc(n.nom)} - ${esc(n.objet)}</td>
-      <td class="n">${f2(calc(n).tot)}</td>
-      <td><span class="badge bg-${n.statut.toLowerCase().replace('é','e')}">${n.statut}</span></td>
-      <td><button class="s" data-a="open" data-i="${esc(n.id)}">Ouvrir</button></td>
-    </tr>`).join("");
-  
-  return `<section>
-    <h2>${S.isLocalMode ? 'Mes notes privées' : 'Toutes les notes de l\'équipe'}</h2>
-    <p><button data-a="new">+ Nouvelle note</button></p>
-    <div class="tw"><table>
-      <tr><th>Date</th><th>Technicien / Objet</th><th class="n">Total DH</th><th>Statut</th><th>Action</th></tr>
-      ${rows || '<tr><td colspan="5">Aucune note trouvée.</td></tr>'}
-    </table></div>
-  </section>`;
-}
-
-function edit(n) {
-  const c = calc(n), dev = esc(n.devise);
-  const locked = n.statut === 'Validée';
-  const lockAttr = locked ? "disabled" : "";
-  
-  const I = (k, l, t="text") => `<div><label>${l}</label><input data-k="${k}" type="${t}" value="${esc(n[k])}" ${lockAttr}></div>`;
-  const opts = Object.keys(PAYS).map(p => `<option ${p===n.pays?"selected":""}>${esc(p)}</option>`).join("");
-  
-  let actionButtons = `<button class="s" data-a="back">← Retour</button> <button data-a="xls">Excel</button> <button class="s" data-a="pdf">PDF</button>`;
-  
-  if (!locked) {
-      if (S.isLocalMode) {
-          actionButtons += ` <button class="v" data-a="valider">Valider</button>`;
-      } else {
-          if (n.statut === 'Brouillon' || n.statut === 'Refusée') {
-              actionButtons += ` <button class="s" data-a="soumettre">Soumettre</button>`;
-          } else if (n.statut === 'Soumise') {
-              actionButtons += ` <button class="i" data-a="verifier">Vérifier (Compta)</button> <button class="d" data-a="refuser">Refuser</button>`;
-          } else if (n.statut === 'Vérifiée') {
-              actionButtons += ` <button class="v" data-a="valider">Valider (Patron)</button> <button class="d" data-a="refuser">Refuser</button>`;
-          }
-      }
-  }
-  actionButtons += ` <button class="d" data-a="del">Supprimer</button>`;
-
-  let alertBox = "";
-  if (!S.isLocalMode && n.statut === 'Refusée' && n.motif_refus) {
-      alertBox = `<div style="background:#f8d7da;color:#721c24;padding:10px;border-radius:5px;margin-bottom:12px;border:1px solid #f5c6cb;"><b>⚠️ Note refusée :</b> ${esc(n.motif_refus)}<br><small>Veuillez corriger et cliquer sur "Soumettre".</small></div>`;
-  }
-
-  const dp = n.deps.map((x, i) => `<tr><td>${fd(x.d)}</td><td>${esc(x.desc)}</td><td class="n">${f2(x.m)}</td><td class="n">${f2(c.dh[i])}</td><td>${locked?'':`<button class="x np" data-a="rmdep" data-i="${i}">×</button>`}</td></tr>`).join("");
-
-  return `<p class="np">${actionButtons}</p>
-${alertBox}
-<section><h2>En-tête de la Note <span class="badge bg-${n.statut.toLowerCase().replace('é','e')} float-right">${n.statut}</span></h2>
-<div class="g">${I("nom","Nom / Fonction")}${I("service","Service")}${I("du","Du","date")}${I("au","Au","date")}
-<div><label>Pays</label><select data-k="pays" ${lockAttr}>${opts}</select></div>${I("objet","Objet de mission")}
-</div></section>
-
+function edit(n){
+  const c=calc(n),dev=esc(n.devise);
+  const I=(k,l,t="text",x="")=>`<div><label>${l}</label><input data-k="${k}" type="${t}" value="${esc(n[k])}" ${x}></div>`;
+  const opts=Object.keys(PAYS).map(p=>`<option ${p===n.pays?"selected":""}>${esc(p)}</option>`).join("")+'<option value="__x">Autre pays…</option>';
+  const last=n.deps.length?n.deps[n.deps.length-1].d:n.du;
+  const av=n.avances.map((a,i)=>`<tr><td>${fd(a.d)}</td><td class="n">${f2(a.m)}</td>${c.loc?"":`<td class="n">${c.t?f2(a.m/c.t):"—"} ${dev}</td>`}<td><button class="x np" data-a="rmav" data-i="${i}">×</button></td></tr>`).join("");
+  const dp=n.deps.map((x,i)=>{
+    const t=x.cur==="X"&&!c.loc?f2(x.m)+" "+dev:f2(x.m);
+    return`<tr><td>${fd(x.d)}</td><td>${esc(x.desc)}</td><td class="n">${x.mode==="cash"?t:""}</td><td class="n">${x.mode==="carte"?t:""}</td><td class="n">${x.mode==="autre"?t:""}</td><td class="n"><b>${f2(c.dh[i])}</b></td><td><button class="x np" data-a="rmdep" data-i="${i}">×</button></td></tr>`}).join("");
+  const reste=c.reste>=0?["À rembourser (par le technicien)",c.reste]:["À payer (par l'entreprise)",-c.reste];
+  return`<p class="np"><button class="s" data-a="back">← Retour</button> <button data-a="xls">Exporter Excel</button> <button class="s" data-a="pdf">Exporter PDF</button> <button class="d" data-a="del">Supprimer</button></p>${bar(n)}
+<section><h2>Note de frais — employé et déplacement</h2><div class="g">
+${I("nom","Nom de l'employé / fonction")}${I("service","Service / Department")}${I("du","Période du","date")}${I("au","au","date")}
+<div><label>Pays de destination</label><select data-k="pays">${opts}</select></div>${I("objet","Objet / client")}
+<div><label>Devise</label><input value="${dev}" readonly></div>
+${c.loc?"":`<div><label>Taux : 1 ${dev} = … DH (taux de la banque)</label><input data-k="taux" inputmode="decimal" value="${n.taux||""}" placeholder="ex. 10,85"></div>`}
+</div>${!c.loc&&!c.t?'<p class="warn">Saisissez le taux de change : il s\'applique à toutes les dépenses en devise.</p>':""}</section>
+<section><h2>Avances (reçues en DH)</h2><div class="tw"><table><tr><th>Date</th><th class="n">Montant DH</th>${c.loc?"":`<th class="n">Équivalent ${dev}</th>`}<th class="np"></th></tr>${av}</table></div>
+<div class="g np frm" style="margin-top:8px"><div><label>Date</label><input id="ad" type="date" value="${esc(n.du)}"></div><div><label>Montant (DH)</label><input id="am" inputmode="decimal"></div><div><button data-a="addav">Ajouter l'avance</button></div></div></section>
 <section><h2>Dépenses</h2>
-${!locked ? `<div class="np"><div class="chips">${CH.map(x=>`<button data-a="chip" data-v="${x}">${x}</button>`).join("")}</div>
-<div class="g"><div><label>Date</label><input id="dt" type="date" value="${esc(n.du)}"></div><div><label>Description</label><input id="dd"></div>
+<div class="np frm"><div class="chips">${CH.map(x=>`<button data-a="chip" data-v="${x}">${x}</button>`).join("")}</div>
+<div class="g"><div><label>Date</label><input id="dt" type="date" value="${esc(last)}"></div><div><label>Description</label><input id="dd"></div>
 <div><label>Montant</label><input id="dm" inputmode="decimal"></div>
-<div><label>Paiement</label><select id="dmo"><option value="cash">Cash</option><option value="carte">Carte</option></select></div>
-<div><button data-a="adddep">Ajouter</button></div></div></div>` : ''}
-<div class="tw" style="margin-top:8px"><table><tr><th>Date</th><th>Description</th><th class="n">Montant saisi</th><th class="n">Total DH</th><th class="np"></th></tr>${dp}</table></div></section>
+${c.loc?"":`<div><label>Monnaie</label><select id="dc"><option value="X">${dev}</option><option value="DH">DH</option></select></div>`}
+<div><label>Paiement</label><select id="dmo"><option value="cash">Cash</option><option value="carte">Carte</option><option value="autre">Autre</option></select></div>
+<div><button data-a="adddep">Ajouter</button></div></div></div>
+<div class="tw" style="margin-top:8px"><table><tr><th>Date</th><th>Description</th><th class="n">Paiement cash</th><th class="n">Paiement carte</th><th class="n">Paiement autre</th><th class="n">Total DH</th><th class="np"></th></tr>${dp}</table></div></section>
 <section><h2>Totaux</h2><div class="g">
-<div><label>Total dépenses (DH)</label><div class="big">${f2(c.tot)}</div></div></div></section>`;
+<div><label>Total dépenses (DH)</label><div class="big">${f2(c.tot)}</div></div>
+${c.loc?"":`<div><label>Total dépenses (${dev})</label><div class="big">${f2(c.dev)}</div></div>`}
+<div><label>Avance (DH)</label><div class="big">${f2(c.av)}</div></div>
+<div><label>${reste[0]}</label><div class="big">${f2(reste[1])}</div></div></div></section>
+<section><div class="g"><div><label>Signature employé</label><br><br>_____________</div><div><label>Signature direction</label><br><br>_____________</div></div></section>`;
 }
 
-document.addEventListener("click", async e => {
-  const b = e.target.closest("[data-a]"); if (!b) return;
-  const a = b.dataset.a, n = cur();
-  
-  try {
-    if (a === "new") { const x = newNote(); S.id = x.id; return await persist(x); }
-    if (a === "open") { S.id = b.dataset.i; return render(); }
-    if (a === "back") { S.id = null; return render(); }
-    
-    if (!n) return;
-
-    if (a === "pdf") return await pdf(n);
-    if (a === "xls") return await xls(n);
-    if (a === "chip") { $("#dd").value = b.dataset.v; return $("#dm").focus(); }
-    
-    if (a === "adddep") {
-      const m = num($("#dm").value);
-      if (!(m > 0)) return alert("Montant requis.");
-      n.deps.push({d: $("#dt").value, desc: $("#dd").value.toUpperCase(), m: r2(m), cur: "DH", mode: $("#dmo").value});
-      return await persist(n);
+/* ---------- Actions ---------- */
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;
+  const a=b.dataset.a,n=cur(),v=id=>($("#"+id)?.value||"").trim();
+  try{
+    if(a==="new"){const x=newNote();S.notes.unshift(x);S.id=x.id;return persist(x)}
+    if(a==="open"){S.id=b.dataset.i;return render()}
+    if(a==="back"){S.id=null;return render()}
+    if(a==="rpdf"||a==="rxls"){const x=S.notes.find(y=>y.id===b.dataset.i);return x&&await(a==="rpdf"?pdf(x):xls(x))}
+    if(a==="bk")return backup();
+    if(!n)return;
+    if(a==="del"){
+      if(!confirm("Supprimer définitivement cette note ?"))return;
+      if(SHARED){
+        const code=prompt("Code de suppression :");if(!code)return;
+        await guard(n.id,"del",code.trim(),()=>fb.fs.deleteDoc(fb.fs.doc(fb.db,"notes",n.id)));
+        S.id=null;return render();
+      }
+      S.notes=S.notes.filter(x=>x!==n);S.id=null;store.set(K+"notes",S.notes);return render();
     }
-    
-    if (a === "rmdep") { n.deps.splice(+b.dataset.i, 1); return await persist(n); }
-    
-    if (a === "soumettre") {
-      n.statut = "Soumise";
-      n.motif_refus = ""; 
-      return await persist(n);
+    if(a==="submit"){if(!confirm("Soumettre cette note à la validation ? Elle ne sera plus modifiable."))return;n.statut="Soumise";delete n.verif;return persist(n)}
+    if(a==="reopen"){n.statut="Brouillon";delete n.verif;return persist(n)}
+    if(a==="verif"||a==="valid"||a==="reject"){
+      let motif="";
+      if(a==="reject"){motif=(prompt("Motif du refus :")||"").trim();if(!motif)return}
+      const code=prompt(a==="verif"?"Code compta :":a==="valid"?"Code de validation du patron :":"Code (compta ou patron) :");if(!code)return;
+      const kinds=a==="verif"?["ver"]:a==="valid"?["val"]:(n.statut==="Soumise"?["ver","val"]:["val"]);
+      const now=new Date().toISOString();
+      const nx=a==="verif"?{statut:"Vérifiée",verif:{date:now}}:a==="valid"?{statut:"Validée",valid:{date:now,motif:""}}:{statut:"Refusée",valid:{date:now,motif}};
+      await guardAny(n.id,kinds,code.trim(),()=>fb.fs.setDoc(fb.fs.doc(fb.db,"notes",n.id),{...clean(n),...nx,upd:Date.now()}));
+      return;
     }
-
-    if (a === "verifier") {
-      if (S.isLocalMode) {
-         n.statut = "Vérifiée"; return await persist(n); 
-      }
-      const pin = prompt("Code secret Compta (PIN) pour certifier les reçus :");
-      if (!pin) return;
-      try {
-        await updateDoc(doc(db, "notes", n.id), { statut: "Vérifiée", action_pin: pin });
-        alert("Note vérifiée par la comptabilité.");
-      } catch (err) {
-        alert("Échec. Code PIN incorrect.");
-      }
+    if(a==="pdf")return await pdf(n);
+    if(a==="xls")return await xls(n);
+    if(a==="chip"){$("#dd").value=b.dataset.v;return $("#dm").focus()}
+    if(a==="addav"){
+      const m=num(v("am"));
+      if(!(m>0)||!v("ad"))return alert("Date et montant requis.");
+      n.avances.push({d:v("ad"),m:r2(m)});return persist(n);
     }
-
-    if (a === "valider") {
-      if (S.isLocalMode) {
-         n.statut = "Validée"; return await persist(n); 
-      }
-      const pin = prompt("Code secret Patron (PIN) pour valider :");
-      if (!pin) return;
-      try {
-        await updateDoc(doc(db, "notes", n.id), { statut: "Validée", action_pin: pin });
-        alert("Note validée avec succès.");
-      } catch (err) {
-        alert("Échec. Code PIN incorrect ou droits insuffisants.");
-      }
+    if(a==="adddep"){
+      const m=num(v("dm"));
+      if(!(m>0)||!v("dt")||!v("dd"))return alert("Date, description et montant requis.");
+      n.deps.push({d:v("dt"),desc:v("dd").toUpperCase(),m:r2(m),cur:v("dc")||"DH",mode:v("dmo")});return persist(n);
     }
-
-    if (a === "refuser") {
-      if (S.isLocalMode) return;
-      const pin = prompt("Code secret (Compta ou Patron) pour refuser :");
-      if (!pin) return;
-      const motif = prompt("Motif du refus (ex: Justificatif manquant) :");
-      if (!motif) return;
-      try {
-        await updateDoc(doc(db, "notes", n.id), { statut: "Refusée", motif_refus: motif, action_pin: pin });
-        alert("Note refusée.");
-      } catch (err) {
-        alert("Échec. Code PIN incorrect.");
-      }
-    }
-
-    if (a === "del") {
-      if (S.isLocalMode) {
-        if(confirm("Supprimer la note locale ?")) {
-          S.notes = S.notes.filter(x => x.id !== n.id);
-          store.set("ndf_notes", S.notes); S.id = null; render();
-        }
-        return;
-      }
-      const pin = prompt("Code secret de suppression (PIN) :");
-      if (!pin) return;
-      try {
-        await updateDoc(doc(db, "notes", n.id), { supprime: true, action_pin: pin });
-        S.id = null; render();
-      } catch (err) {
-        alert("Échec. Code PIN incorrect.");
-      }
-    }
-  } catch (err) { alert(err.message); }
+    if(a==="rmav"){n.avances.splice(+b.dataset.i,1);return persist(n)}
+    if(a==="rmdep"){n.deps.splice(+b.dataset.i,1);return persist(n)}
+  }catch(err){alert(err.message||err)}
 });
-
-document.addEventListener("change", e => {
-  const t = e.target, n = cur(), k = t.dataset?.k;
-  if (!n || !k || n.statut === 'Validée') return;
-  n[k] = t.value.trim();
-  if (k === "nom" || k === "service") { S.profil[k] = n[k]; store.set("ndf_profil", S.profil); }
+document.addEventListener("change",e=>{
+  const t=e.target,n=cur(),k=t.dataset?.k;
+  if(t.dataset?.f){S.f[t.dataset.f]=t.value.trim();return render()}
+  if(t.id==="rf"&&t.files[0])return restore(t.files[0]);
+  if(!n||!k)return;
+  if(k==="pays"){
+    let p=t.value;
+    if(p==="__x"){
+      p=(prompt("Nom du pays ?")||"").trim();
+      const d=(prompt("Code devise (ex. EUR, USD, SAR) ?")||"").trim().toUpperCase();
+      if(!p||!/^[A-Z]{3}$/.test(d))return render();
+      PAYS[p]=d;S.pays[p]=d;store.set(K+"pays",S.pays);
+    }
+    n.pays=p;n.devise=PAYS[p];n.taux=n.devise==="MAD"?1:(n.taux===1?"":n.taux);
+  }else if(k==="taux"){const x=num(t.value);n.taux=x>0?x:""}
+  else n[k]=t.value.trim();
+  if(k==="nom"||k==="service"){S.profil[k]=n[k];store.set(K+"profil",S.profil)}
   persist(n);
 });
 
+/* ---------- Export Excel (même structure que le modèle validé) ---------- */
 async function xls(n){
   await ready;
-  const c = calc(n);
-  if(!window.ExcelJS) await new Promise((ok,ko)=>{
+  const c=calc(n);
+  if(!window.ExcelJS)await new Promise((ok,ko)=>{
     const s=document.createElement("script");
     s.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
-    s.onload=ok; s.onerror=()=>ko(new Error("Connexion internet requise."));
+    s.onload=ok;s.onerror=()=>ko(new Error("Connexion internet requise pour l'export Excel."));
     document.head.appendChild(s);
   });
-  const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet((n.nom||"Note").replace(/[\\\/?*\[\]:]/g," ").slice(0,30)||"Note");
-  ws.columns = [{width:15},{width:28},{width:14},{width:14},{width:15},{width:18}];
-  ws.pageSetup = {paperSize:9, fitToPage:true, fitToWidth:1, fitToHeight:0};
-  const BD = {top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
-  const D = "dd/mm/yyyy", M = "#,##0.00", dt = d => d?new Date(d+"T00:00:00Z"):null;
-  const put = (a,v,o={})=>{const x=ws.getCell(a);x.value=v;x.font={name:"Arial",size:10,bold:!!o.b};
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet((n.nom||"Note").replace(/[\\\/?*\[\]:]/g," ").slice(0,30)||"Note");
+  ws.columns=[{width:15},{width:28},{width:14},{width:14},{width:15},{width:18}];
+  ws.pageSetup={paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0};
+  const BD={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  const D="dd/mm/yyyy",M="#,##0.00",dt=d=>d?new Date(d+"T00:00:00Z"):null;
+  const put=(a,v,o={})=>{const x=ws.getCell(a);x.value=v;x.font={name:"Arial",size:10,bold:!!o.b};
     if(o.f)x.numFmt=o.f;if(o.g)x.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE8EDF3"}};return x};
-  const box = r => ["A","B","C","D","E","F"].forEach(l=>ws.getCell(l+r).border=BD);
+  const box=r=>["A","B","C","D","E","F"].forEach(l=>ws.getCell(l+r).border=BD);
 
-  const title = n.statut === 'Validée' ? "NOTE DE FRAIS" : "NOTE DE FRAIS (PROVISOIRE)";
-  put("A2", title, {b:1}); ws.getCell("A2").font={name:"Arial",size:14,bold:true};
-  
-  const so = socOf(n);
+  put("A2",SHARED&&n.statut!=="Validée"?"NOTE DE FRAIS (PROVISOIRE)":"NOTE DE FRAIS",{b:1});ws.getCell("A2").font={name:"Arial",size:14,bold:true};
+  const so=socOf(n);
   [so.nom,so.adr,so.contact,so.ids].forEach((t,i)=>{const a="D"+(i+1);put(a,t||"",{b:i==0});ws.mergeCells(a+":F"+(i+1));
     ws.getCell(a).alignment={horizontal:"right"};if(i==0)ws.getCell(a).font={name:"Arial",size:12,bold:true}});
   if(so.logo){const k=Math.min(1,150/so.lw,40/so.lh);ws.addImage(wb.addImage({base64:so.logo,extension:"png"}),{tl:{col:0,row:2},ext:{width:so.lw*k,height:so.lh*k}})}
-  
   put("A5","Nom de l'Employe /fonction");put("C5",n.nom,{b:1});
   put("A6","Service / Department");put("C6",n.service,{b:1});
   put("A7","Période");put("C7",dt(n.du),{f:D});put("D7","AU",{b:1});put("E7",dt(n.au),{f:D});
@@ -416,14 +336,8 @@ async function xls(n){
   const s=payR+2;
   put("A"+s,"Signature",{b:1});put("C"+s,"Signature",{b:1});
   put("A"+(s+1),"Employé",{b:1});put("C"+(s+1),"Direction",{b:1});
-  
-  if (n.statut === 'Validée') {
-    put("C"+(s+2), "✓ VALIDÉE", {b:1});
-  } else {
-    put("C"+(s+2), "En attente de validation", {b:0});
-  }
-
   ws.getRow(s+2).height=45;["A","B","C","D"].forEach(l=>ws.getCell(l+(s+2)).border=BD);
+  if(SHARED){const ok=n.statut==="Validée";put("C"+(s+2),ok?"VALIDÉE le "+fd((n.valid?.date||"").slice(0,10)):"En attente de validation",{b:ok})}
 
   const buf=await wb.xlsx.writeBuffer(),a=document.createElement("a");
   a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
@@ -431,7 +345,7 @@ async function xls(n){
   a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
 }
 
-const lib = src => new Promise((ok,ko)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>ko(new Error("Connexion internet requise."));document.head.appendChild(s)});
+const lib=src=>new Promise((ok,ko)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>ko(new Error("Connexion internet requise pour générer le PDF."));document.head.appendChild(s)});
 async function pdf(n){
   await ready;
   if(!window.jspdf){
@@ -444,15 +358,15 @@ async function pdf(n){
   const T=o=>{const rc=o.rc||[];doc.autoTable({...base,...o,styles:{...base.styles,...(o.styles||{})},didParseCell:d=>{if(rc.includes(d.column.index))d.cell.styles.halign="right"}});y=doc.lastAutoTable.finalY};
   const need=h=>{if(y+h>280){doc.addPage();y=16}};
   const sec=t=>{need(30);y+=7;doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(10).text(t,M,y);y+=1.5};
+  const R={halign:"right"};
 
+  /* En-tête société */
   if(so.logo){const k=Math.min(45/so.lw,20/so.lh);doc.addImage(so.logo,"PNG",M,y,so.lw*k,so.lh*k)}
   doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(13).text(so.nom||"",W-M,y+4,{align:"right"});
   doc.setTextColor(80).setFont("helvetica","normal").setFontSize(8.5);
   [so.adr,so.contact,so.ids].filter(Boolean).forEach((t,i)=>doc.text(t,W-M,y+10+i*4.5,{align:"right"}));
   doc.setDrawColor(...BL).setLineWidth(.6).line(M,38,W-M,38);
-  
-  const title = n.statut === 'Validée' ? "NOTE DE FRAIS" : "NOTE DE FRAIS (PROVISOIRE)";
-  doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(17).text(title,W/2,48,{align:"center"});
+  doc.setTextColor(...BL).setFont("helvetica","bold").setFontSize(17).text(SHARED&&n.statut!=="Validée"?"NOTE DE FRAIS (PROVISOIRE)":"NOTE DE FRAIS",W/2,48,{align:"center"});
 
   T({startY:54,body:[["Nom / fonction",n.nom],["Service / Department",n.service],["Période","du "+fd(n.du)+" au "+fd(n.au)],["Destination / objet",n.pays+(n.objet?" - "+n.objet:"")]]
     .concat(c.loc?[]:[["Devise / taux de change",dev+" : 1 "+dev+" = "+String(c.t).replace(".",",")+" DH"]]),
@@ -479,18 +393,10 @@ async function pdf(n){
     columnStyles:{0:{fontStyle:"bold",fillColor:GR},1:{halign:"right",fontStyle:"bold"}}});
 
   need(45);y+=8;
-  const bx=(x,t, isDir)=>{
-    doc.setDrawColor(150).setLineWidth(.3).rect(x,y,85,28);
-    doc.setTextColor(30).setFont("helvetica","bold").setFontSize(9).text(t,x+3,y+5);
-    if (isDir) {
-      if (n.statut === 'Validée') {
-        doc.setTextColor(40, 167, 69).setFontSize(10).text("✓ VALIDÉE", x+3, y+15);
-      } else {
-        doc.setTextColor(200, 50, 50).setFontSize(10).text("En attente de validation", x+3, y+15);
-      }
-    }
-  };
-  bx(M,"Signature Employé", false); bx(W-M-85,"Signature Direction", true); y+=32;
+  const bx=(x,t)=>{doc.setDrawColor(150).setLineWidth(.3).rect(x,y,85,28);doc.setTextColor(30).setFont("helvetica","bold").setFontSize(9).text(t,x+3,y+5)};
+  bx(M,"Signature Employé");bx(W-M-85,"Signature Direction");
+  if(SHARED){const ok=n.statut==="Validée";doc.setFont("helvetica","bold").setFontSize(10).setTextColor(...(ok?[27,122,58]:[200,50,50])).text(ok?"VALIDÉE le "+fd((n.valid?.date||"").slice(0,10)):"En attente de validation",W-M-82,y+16)}
+  y+=32;
 
   const N=doc.getNumberOfPages();
   for(let i=1;i<=N;i++){
@@ -501,8 +407,16 @@ async function pdf(n){
   doc.save("Note_de_Frais_"+((n.nom||"technicien").replace(/\W+/g,"_"))+"_"+n.du+".pdf");
 }
 
-initSync();
-render();
-</script>
-</body>
-</html>
+if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+(function(){
+  if(LOCAL)$("#banner").style.display="block";
+  if(FORCED)return;
+  let c=0,t;
+  $("#trig").addEventListener("click",()=>{
+    c++;clearTimeout(t);t=setTimeout(()=>{c=0},2000);
+    if(c>=5){c=0;try{localStorage.setItem("ndf_mode",LOCAL?"shared":"local")}catch{}
+      alert(LOCAL?"Mode PARTAGÉ activé.":"Mode LOCAL PRIVÉ activé : vos notes restent sur cet appareil.");location.reload()}
+  });
+})();
+render();initFB();
+</script></body></html>
